@@ -258,11 +258,13 @@ const subjectOptions = computed(() => {
     text: subject.name,
   }))
 })
-// Open lesson creation modal
+// Open lesson creation modal - UPDATED to clear previous data
 const openLessonModal = (day: Date, slot: TimeSlot) => {
   if (slot.type === 'break') return // Don't allow creating lessons during breaks
 
   selectedSlot.value = { day, slot }
+
+  // Reset form completely to avoid previous choices
   newLesson.value = {
     date: day.toISOString().split('T')[0],
     time: `${slot.hour.toString().padStart(2, '0')}:${slot.minute.toString().padStart(2, '0')}`,
@@ -272,15 +274,26 @@ const openLessonModal = (day: Date, slot: TimeSlot) => {
     isRecurring: false,
     customTime: false,
   }
+
   showLessonModal.value = true
 }
 
-// Close modal
+// Close modal - UPDATED to clear data
 const closeLessonModal = () => {
   showLessonModal.value = false
   selectedSlot.value = null
-}
 
+  // Clear form data when closing
+  newLesson.value = {
+    date: '',
+    time: '',
+    student: '',
+    teacher: '',
+    subject: '',
+    isRecurring: false,
+    customTime: false,
+  }
+}
 // Get available time slots for dropdown (only lesson slots)
 const availableTimeSlots = computed(() => {
   return timeSlots.value
@@ -343,13 +356,16 @@ const createLesson = async () => {
   try {
     if (!selectedSlot.value) return
 
+    // Create start datetime
     const startDateTime = new Date(selectedSlot.value.day)
     const [hours, minutes] = newLesson.value.time.split(':')
-    startDateTime.setHours(parseInt(hours), parseInt(minutes))
+    startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0) // Add seconds
 
+    // Create end datetime (1 hour later)
     const endDateTime = new Date(startDateTime)
     endDateTime.setHours(endDateTime.getHours() + 1)
 
+    // Find the selected entities
     const selectedStudent = students.value.find(
       (s) => `${s.first_name} ${s.last_name}` === newLesson.value.student,
     )
@@ -363,20 +379,35 @@ const createLesson = async () => {
       return
     }
 
+    // Format dates to match Go's expected format: "2006-01-02T15:04:05"
+    const formatTimeForGo = (date: Date): string => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hour = String(date.getHours()).padStart(2, '0')
+      const minute = String(date.getMinutes()).padStart(2, '0')
+      const second = String(date.getSeconds()).padStart(2, '0')
+
+      return `${year}-${month}-${day}T${hour}:${minute}:${second}`
+    }
+
     const lessonData = {
-      teacher_id: selectedTeacher.id,
-      student_id: selectedStudent.id,
-      subject_id: selectedSubject.id,
-      start_time: startDateTime.toISOString(),
-      end_time: endDateTime.toISOString(),
+      teacher_id: Number(selectedTeacher.id),
+      student_id: Number(selectedStudent.id),
+      subject_id: Number(selectedSubject.id),
+      start_time: formatTimeForGo(startDateTime),
+      end_time: formatTimeForGo(endDateTime),
       is_recurring: newLesson.value.isRecurring,
     }
+
+    console.log('Sending lesson data:', lessonData)
 
     const response = await fetch('http://localhost:8080/api/lessons', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include', // Add this for session cookies
       body: JSON.stringify(lessonData),
     })
 
@@ -385,11 +416,12 @@ const createLesson = async () => {
       closeLessonModal()
     } else {
       const error = await response.json()
+      console.error('Backend error:', error)
       alert(error.error || 'Failed to create lesson')
     }
   } catch (error) {
     console.error('Failed to create lesson:', error)
-    alert('Failed to create lesson')
+    alert('Failed to create lesson: ' + (error as Error).message)
   }
 }
 
@@ -429,6 +461,19 @@ onMounted(async () => {
       </div>
       <div class="section-content">
         <p>User management content coming soon...</p>
+        <!-- Add this debug section temporarily in your modal -->
+        <div
+          class="debug-info"
+          style="background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px"
+        >
+          <h4>Debug Info:</h4>
+          <p>Form Valid: {{ isFormValid }}</p>
+          <p>Selected Date: {{ selectedSlot ? selectedSlot.day : 'none' }}</p>
+          <p>Time: {{ newLesson.time }}</p>
+          <p>Teacher: {{ newLesson.teacher }} (type: {{ typeof newLesson.teacher }})</p>
+          <p>Student: {{ newLesson.student }} (type: {{ typeof newLesson.student }})</p>
+          <p>Subject: {{ newLesson.subject }} (type: {{ typeof newLesson.subject }})</p>
+        </div>
         <!-- Add user tables, edit forms, etc here -->
       </div>
     </div>
