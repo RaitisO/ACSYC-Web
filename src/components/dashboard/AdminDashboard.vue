@@ -3,22 +3,27 @@ interface TimeSlot {
   time: string
   hour: number
   minute: number
+  type: 'lesson' | 'break'
 }
 import { ref, computed, onMounted } from 'vue'
 import type { Lesson, CalendarDay } from '@/types/calendar'
+import { useRouter } from 'vue-router'
 import TomSelect from '@/components/TomSelect.vue'
 
 // Add to currentView type
 const currentView = ref<'main' | 'users' | 'lessons' | 'settings'>('main')
-
+const router = useRouter()
 // Calendar state
 const currentWeek = ref(new Date())
 const lessons = ref<Lesson[]>([]) // Will be populated from backend
+
 // Fetch dropdown data with error handling
 const fetchDropdownData = async () => {
   try {
     console.log('Fetching dropdown data...')
-    const response = await fetch('http://localhost:8080/api/dropdown-data')
+    const response = await fetch('http://localhost:8080/api/dropdown-data', {
+      credentials: 'include',
+    })
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -34,6 +39,24 @@ const fetchDropdownData = async () => {
     subjects.value = data.subjects || []
   } catch (error) {
     console.error('Failed to fetch dropdown data:', error)
+  }
+}
+
+const checkAuth = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/api/health', {
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      router.push('/login')
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error('Auth check failed:', error)
+    router.push('/login')
+    return false
   }
 }
 
@@ -55,6 +78,9 @@ const fetchLessons = async () => {
 
     const response = await fetch(
       `http://localhost:8080/api/lessons?start_date=${startDateStr}&end_date=${endDateStr}`,
+      {
+        credentials: 'include',
+      },
     )
 
     if (!response.ok) {
@@ -66,32 +92,64 @@ const fetchLessons = async () => {
     const data = await response.json()
     console.log('Lessons data received:', data)
     lessons.value = data.lessons || []
+
+    // Debug: Check what dates we actually have
+    console.log('=== ALL LESSONS DEBUG ===')
+    lessons.value.forEach((lesson) => {
+      const lessonDate = new Date(lesson.start_time)
+      console.log(`Lesson ${lesson.id}:`, {
+        storedTime: lesson.start_time,
+        date: lessonDate.toDateString(),
+        hours: lessonDate.getHours(),
+        minutes: lessonDate.getMinutes(),
+        teacher: lesson.teacher_name,
+        student: lesson.student_name,
+      })
+    })
   } catch (error) {
     console.error('Failed to fetch lessons:', error)
   }
 }
-// Update getLessonsForTimeSlot to use real data
-const getLessonsForTimeSlot = (day: Date, slot: TimeSlot) => {
+
+// FIXED: Get all lessons for a specific day
+const getLessonsForDay = (day: Date) => {
+  const dayStart = new Date(day)
+  dayStart.setHours(0, 0, 0, 0)
+
+  const dayEnd = new Date(day)
+  dayEnd.setHours(23, 59, 59, 999)
+
   return lessons.value.filter((lesson) => {
     const lessonDate = new Date(lesson.start_time)
-    return (
-      lessonDate.getDate() === day.getDate() &&
-      lessonDate.getMonth() === day.getMonth() &&
-      lessonDate.getFullYear() === day.getFullYear() &&
-      lessonDate.getHours() === slot.hour &&
-      lessonDate.getMinutes() === slot.minute
-    )
+
+    // Simple date string comparison to avoid timezone issues
+    const lessonDateStr = lessonDate.toDateString()
+    const dayDateStr = day.toDateString()
+
+    return lessonDateStr === dayDateStr
   })
 }
-// Generate time slots from 8:00 AM to 23:45 with your schedule system
+
+// FIXED: Get lessons that match exact time slots
+const getLessonsForTimeSlot = (day: Date, slot: TimeSlot) => {
+  if (slot.type !== 'lesson') return []
+
+  const dayLessons = getLessonsForDay(day)
+
+  return dayLessons.filter((lesson) => {
+    const lessonDate = new Date(lesson.start_time)
+    return lessonDate.getHours() === slot.hour && lessonDate.getMinutes() === slot.minute
+  })
+}
+
+// Generate time slots from 8:00 AM to 23:45
 const timeSlots = computed(() => {
   const slots = []
   let hour = 8
   let minute = 0
-  let lessonCount = 0 // Track consecutive lessons
+  let lessonCount = 0
 
   while (hour < 24) {
-    // Add lesson time slot
     slots.push({
       time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
       hour,
@@ -101,19 +159,15 @@ const timeSlots = computed(() => {
 
     lessonCount++
 
-    // Check if we need a break (after every 2 lessons)
     if (lessonCount === 2) {
-      // Calculate break time
       let breakHour = hour
-      let breakMinute = minute + 60 // Lesson duration is 60 minutes
+      let breakMinute = minute + 60
 
-      // Handle minute overflow
       if (breakMinute >= 60) {
         breakHour += Math.floor(breakMinute / 60)
         breakMinute = breakMinute % 60
       }
 
-      // Add break slot if it's still within the day
       if (breakHour < 24) {
         slots.push({
           time: `${breakHour.toString().padStart(2, '0')}:${breakMinute.toString().padStart(2, '0')}`,
@@ -122,24 +176,20 @@ const timeSlots = computed(() => {
           type: 'break' as const,
         })
 
-        // Move to next lesson after break (15 minutes later)
         hour = breakHour
         minute = breakMinute + 15
 
-        // Handle minute overflow after break
         if (minute >= 60) {
           hour += Math.floor(minute / 60)
           minute = minute % 60
         }
       } else {
-        // If break would go past midnight, just move to next day logic
         hour = breakHour
         minute = breakMinute
       }
 
-      lessonCount = 0 // Reset lesson counter
+      lessonCount = 0
     } else {
-      // Move to next lesson (normal progression)
       minute += 60
       if (minute >= 60) {
         hour += Math.floor(minute / 60)
@@ -147,7 +197,6 @@ const timeSlots = computed(() => {
       }
     }
 
-    // Safety check to prevent infinite loops
     if (hour >= 24) break
   }
 
@@ -158,11 +207,7 @@ const timeSlots = computed(() => {
 const weekDays = computed(() => {
   const startOfWeek = new Date(currentWeek.value)
   const currentDay = startOfWeek.getDay()
-
-  // Calculate how many days to subtract to get to Monday
-  // Monday is day 1 in JavaScript (0=Sunday, 1=Monday, ..., 6=Saturday)
   const daysToMonday = currentDay === 0 ? 6 : currentDay - 1
-
   startOfWeek.setDate(startOfWeek.getDate() - daysToMonday)
 
   return Array.from({ length: 7 }, (_, i) => {
@@ -191,11 +236,12 @@ const goToToday = () => {
   currentWeek.value = new Date()
   fetchLessons()
 }
+
 // Formatting functions
 const formatDayName = (date: Date) => {
   return date.toLocaleDateString('en-US', { weekday: 'short' })
 }
-// Check if a date is today
+
 const isToday = (date: Date) => {
   const today = new Date()
   return (
@@ -212,7 +258,7 @@ const formatWeekRange = (date: Date) => {
   startOfWeek.setDate(startOfWeek.getDate() - daysToMonday)
 
   const endOfWeek = new Date(startOfWeek)
-  endOfWeek.setDate(endOfWeek.getDate() + 6) // Sunday is 6 days after Monday
+  endOfWeek.setDate(endOfWeek.getDate() + 6)
 
   return `${startOfWeek.toLocaleDateString()} - ${endOfWeek.toLocaleDateString()}`
 }
@@ -222,6 +268,7 @@ const showUsers = () => (currentView.value = 'users')
 const showLessons = () => (currentView.value = 'lessons')
 const showSettings = () => (currentView.value = 'settings')
 const goBack = () => (currentView.value = 'main')
+
 // Lesson creation state
 const showLessonModal = ref(false)
 const selectedSlot = ref<{ day: Date; slot: TimeSlot } | null>(null)
@@ -238,6 +285,7 @@ const newLesson = ref({
 const students = ref<{ id: number; first_name: string; last_name: string }[]>([])
 const teachers = ref<{ id: number; first_name: string; last_name: string }[]>([])
 const subjects = ref<{ id: number; name: string }[]>([])
+
 const studentOptions = computed(() => {
   return students.value.map((student) => ({
     value: `${student.first_name} ${student.last_name}`,
@@ -258,13 +306,12 @@ const subjectOptions = computed(() => {
     text: subject.name,
   }))
 })
-// Open lesson creation modal - UPDATED to clear previous data
+
+// Open lesson creation modal
 const openLessonModal = (day: Date, slot: TimeSlot) => {
-  if (slot.type === 'break') return // Don't allow creating lessons during breaks
+  if (slot.type === 'break') return
 
   selectedSlot.value = { day, slot }
-
-  // Reset form completely to avoid previous choices
   newLesson.value = {
     date: day.toISOString().split('T')[0],
     time: `${slot.hour.toString().padStart(2, '0')}:${slot.minute.toString().padStart(2, '0')}`,
@@ -274,16 +321,13 @@ const openLessonModal = (day: Date, slot: TimeSlot) => {
     isRecurring: false,
     customTime: false,
   }
-
   showLessonModal.value = true
 }
 
-// Close modal - UPDATED to clear data
+// Close modal
 const closeLessonModal = () => {
   showLessonModal.value = false
   selectedSlot.value = null
-
-  // Clear form data when closing
   newLesson.value = {
     date: '',
     time: '',
@@ -294,7 +338,8 @@ const closeLessonModal = () => {
     customTime: false,
   }
 }
-// Get available time slots for dropdown (only lesson slots)
+
+// Get available time slots for dropdown
 const availableTimeSlots = computed(() => {
   return timeSlots.value
     .filter((slot) => slot.type === 'lesson')
@@ -326,17 +371,14 @@ const formatModalDate = (date: Date) => {
     day: 'numeric',
   })
 }
+
 // Calculate end date for recurring lessons
 const getEndDate = () => {
   const today = new Date()
-  const month = today.getMonth() // 0-11 (Jan-Dec)
-
-  // If between June and August (summer), end August 31st
+  const month = today.getMonth()
   if (month >= 5 && month <= 7) {
     return `August 31, ${today.getFullYear()}`
-  }
-  // Otherwise school year, end May 31st of next year
-  else {
+  } else {
     return `May 31, ${today.getFullYear() + 1}`
   }
 }
@@ -351,21 +393,18 @@ const isFormValid = computed(() => {
   )
 })
 
-// Create lesson function (frontend only for now)
+// Create lesson function
 const createLesson = async () => {
   try {
     if (!selectedSlot.value) return
 
-    // Create start datetime
     const startDateTime = new Date(selectedSlot.value.day)
     const [hours, minutes] = newLesson.value.time.split(':')
-    startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0) // Add seconds
+    startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
 
-    // Create end datetime (1 hour later)
     const endDateTime = new Date(startDateTime)
     endDateTime.setHours(endDateTime.getHours() + 1)
 
-    // Find the selected entities
     const selectedStudent = students.value.find(
       (s) => `${s.first_name} ${s.last_name}` === newLesson.value.student,
     )
@@ -379,15 +418,14 @@ const createLesson = async () => {
       return
     }
 
-    // Format dates to match Go's expected format: "2006-01-02T15:04:05"
     const formatTimeForGo = (date: Date): string => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const hour = String(date.getHours()).padStart(2, '0')
-      const minute = String(date.getMinutes()).padStart(2, '0')
-      const second = String(date.getSeconds()).padStart(2, '0')
-
+      const utcDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      const year = utcDate.getUTCFullYear()
+      const month = String(utcDate.getUTCMonth() + 1).padStart(2, '0')
+      const day = String(utcDate.getUTCDate()).padStart(2, '0')
+      const hour = String(utcDate.getUTCHours()).padStart(2, '0')
+      const minute = String(utcDate.getUTCMinutes()).padStart(2, '0')
+      const second = String(utcDate.getUTCSeconds()).padStart(2, '0')
       return `${year}-${month}-${day}T${hour}:${minute}:${second}`
     }
 
@@ -407,12 +445,12 @@ const createLesson = async () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      credentials: 'include', // Add this for session cookies
+      credentials: 'include',
       body: JSON.stringify(lessonData),
     })
 
     if (response.ok) {
-      await fetchLessons() // Refresh the calendar
+      await fetchLessons()
       closeLessonModal()
     } else {
       const error = await response.json()
@@ -427,8 +465,11 @@ const createLesson = async () => {
 
 // Initialize data
 onMounted(async () => {
-  await fetchDropdownData()
-  await fetchLessons()
+  const isAuthenticated = await checkAuth()
+  if (isAuthenticated) {
+    await fetchDropdownData()
+    await fetchLessons()
+  }
 })
 </script>
 
@@ -461,20 +502,6 @@ onMounted(async () => {
       </div>
       <div class="section-content">
         <p>User management content coming soon...</p>
-        <!-- Add this debug section temporarily in your modal -->
-        <div
-          class="debug-info"
-          style="background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px"
-        >
-          <h4>Debug Info:</h4>
-          <p>Form Valid: {{ isFormValid }}</p>
-          <p>Selected Date: {{ selectedSlot ? selectedSlot.day : 'none' }}</p>
-          <p>Time: {{ newLesson.time }}</p>
-          <p>Teacher: {{ newLesson.teacher }} (type: {{ typeof newLesson.teacher }})</p>
-          <p>Student: {{ newLesson.student }} (type: {{ typeof newLesson.student }})</p>
-          <p>Subject: {{ newLesson.subject }} (type: {{ typeof newLesson.subject }})</p>
-        </div>
-        <!-- Add user tables, edit forms, etc here -->
       </div>
     </div>
 
@@ -518,7 +545,6 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- In the days grid -->
           <div class="days-grid">
             <div
               v-for="day in weekDays"
@@ -538,7 +564,7 @@ onMounted(async () => {
               >
                 <div v-if="slot.type === 'break'" class="break-block">15 min Break</div>
 
-                <!-- Lessons only show in lesson slots -->
+                <!-- SIMPLIFIED: Show lessons in their time slots -->
                 <div
                   v-else
                   v-for="lesson in getLessonsForTimeSlot(day, slot)"
@@ -546,12 +572,15 @@ onMounted(async () => {
                   class="lesson-block"
                   :class="lesson.status"
                 >
-                  <div class="lesson-title">{{ lesson.title }}</div>
-                  <div class="lesson-details">{{ lesson.teacher }} → {{ lesson.student }}</div>
+                  <div class="lesson-title">{{ lesson.subject_name }}</div>
+                  <div class="lesson-details">
+                    {{ lesson.teacher_name }} → {{ lesson.student_name }}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+
           <!-- Lesson Creation Modal -->
           <div v-if="showLessonModal" class="modal-overlay" @click="closeLessonModal">
             <div class="modal-content" @click.stop>
@@ -561,12 +590,10 @@ onMounted(async () => {
               </div>
 
               <div class="modal-body">
-                <!-- Date Display -->
                 <div class="modal-date">
                   <strong>Date:</strong> {{ selectedSlot ? formatModalDate(selectedSlot.day) : '' }}
                 </div>
 
-                <!-- Time Selection -->
                 <div class="form-group">
                   <label>Lesson Time:</label>
                   <select
@@ -600,39 +627,36 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <!-- Student Selection -->
                 <div class="form-group">
                   <label>Student:</label>
                   <TomSelect
                     id="student-select"
                     :options="studentOptions"
                     v-model="newLesson.student"
-                    :placeholder="'Search for a student...'"
+                    placeholder="Search for a student..."
                   />
                 </div>
 
-                <!-- Teacher Selection -->
                 <div class="form-group">
                   <label>Teacher:</label>
                   <TomSelect
                     id="teacher-select"
                     :options="teacherOptions"
                     v-model="newLesson.teacher"
-                    :placeholder="'Search for a teacher...'"
+                    placeholder="Search for a teacher..."
                   />
                 </div>
 
-                <!-- Subject Selection -->
                 <div class="form-group">
                   <label>Subject:</label>
                   <TomSelect
                     id="subject-select"
                     :options="subjectOptions"
                     v-model="newLesson.subject"
-                    :placeholder="'Search for a subject...'"
+                    placeholder="Search for a subject..."
                   />
                 </div>
-                <!-- Recurring Option -->
+
                 <div class="form-group">
                   <label class="checkbox-label">
                     <input type="checkbox" v-model="newLesson.isRecurring" class="checkbox" />
@@ -668,13 +692,13 @@ onMounted(async () => {
       </div>
       <div class="section-content">
         <p>System settings content coming soon...</p>
-        <!-- Add configuration options here -->
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Your existing CSS styles remain exactly the same */
 .admin-dashboard {
   padding: 2rem;
 }
@@ -714,7 +738,6 @@ onMounted(async () => {
   opacity: 0.9;
 }
 
-/* Section Views */
 .section-view {
   background: #fff9d8;
   border-radius: 15px;
@@ -757,6 +780,7 @@ onMounted(async () => {
   color: #333;
   line-height: 1.6;
 }
+
 .calendar-controls {
   display: flex;
   align-items: center;
@@ -884,6 +908,7 @@ onMounted(async () => {
   font-size: 0.7rem;
   opacity: 0.9;
 }
+
 .break-slot {
   background: #fff9d8;
   color: gray;
@@ -912,7 +937,7 @@ onMounted(async () => {
   padding: 0.1rem 0.3rem;
   border-radius: 3px;
 }
-/* Today column highlight */
+
 .today-column {
   background: rgba(255, 249, 216, 0.3) !important;
   position: relative;
@@ -928,7 +953,6 @@ onMounted(async () => {
   background: #f2d422;
 }
 
-/* Today header highlight */
 .today-header {
   background: #f2d422 !important;
   color: #6c0f5f !important;
@@ -940,7 +964,6 @@ onMounted(async () => {
   font-weight: bold;
 }
 
-/* Ensure the highlight works with existing styles */
 .day-header {
   position: relative;
   transition: all 0.3s ease;
@@ -949,7 +972,7 @@ onMounted(async () => {
 .time-cell {
   position: relative;
 }
-/* Clickable slots */
+
 .clickable-slot {
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -959,7 +982,6 @@ onMounted(async () => {
   background: rgba(56, 170, 217, 0.1);
 }
 
-/* Modal Styles */
 .modal-overlay {
   position: fixed;
   top: 0;
