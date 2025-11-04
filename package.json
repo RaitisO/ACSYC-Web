@@ -20,6 +20,10 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@schedule-x/calendar": "^3.3.0",
+    "@schedule-x/events-service": "^3.3.0",
+    "@schedule-x/react": "^3.3.0",
+    "@schedule-x/theme-default": "^3.3.0",
     "pinia": "^3.0.3",
     "tom-select": "^2.4.3",
     "vue": "^3.5.22",
