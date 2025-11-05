@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import FullCalendar from '@fullcalendar/vue3'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
+import TomSelect from 'tom-select'
 
 defineOptions({
   name: 'AdminDashboard',
@@ -18,34 +19,84 @@ const newLesson = ref({
   subject: '',
   start: '',
   end: '',
+  isRecurring: false,
 })
+const formatForDateTimeInput = (dateStr: string) => {
+  const date = new Date(dateStr)
+  // Use UTC methods to avoid timezone conversion
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const hours = String(date.getUTCHours()).padStart(2, '0')
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0')
 
-// Mock data for dropdowns - replace with actual data from your backend
-const teachers = ref([
-  { id: '1', name: 'John Smith' },
-  { id: '2', name: 'Sarah Johnson' },
-  { id: '3', name: 'Mike Davis' },
-  { id: '4', name: 'Emily Wilson' },
-])
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+const calendarEvents = ref<any[]>([])
 
-const students = ref([
-  { id: '1', name: 'Alex Thompson' },
-  { id: '2', name: 'Maria Garcia' },
-  { id: '3', name: 'David Brown' },
-  { id: '4', name: 'Lisa Chen' },
-])
+// Function to fetch lessons from backend
+const fetchLessons = async (start: Date, end: Date) => {
+  try {
+    // Format dates for backend (YYYY-MM-DD)
+    const startStr = start.toISOString().split('T')[0]
+    const endStr = end.toISOString().split('T')[0]
 
-const subjects = ref([
-  'Mathematics',
-  'Physics',
-  'Chemistry',
-  'Biology',
-  'English',
-  'History',
-  'Computer Science',
-])
+    console.log(`Fetching lessons from ${startStr} to ${endStr}`)
 
-// Calendar configuration
+    const response = await fetch(
+      `http://localhost:8080/api/lessons?start_date=${startStr}&end_date=${endStr}`,
+      {
+        credentials: 'include',
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch lessons')
+    }
+
+    const data = await response.json()
+    console.log('Fetched lessons:', data.lessons)
+
+    // Transform backend data to FullCalendar events
+    const events = data.lessons.map((lesson: any) => ({
+      id: lesson.id.toString(),
+      title: `${lesson.subject_name} - ${lesson.teacher_name}`,
+      start: lesson.start_time,
+      end: lesson.end_time,
+      extendedProps: {
+        teacherId: lesson.teacher_id,
+        studentId: lesson.student_id,
+        subjectId: lesson.subject_id,
+        studentName: lesson.student_name,
+        teacherName: lesson.teacher_name,
+        subjectName: lesson.subject_name,
+        status: lesson.status,
+        isRecurring: lesson.is_recurring,
+      },
+    }))
+
+    calendarEvents.value = events
+  } catch (error) {
+    console.error('Error fetching lessons:', error)
+    calendarEvents.value = []
+  }
+}
+// Update the calculateEndTime function
+const calculateEndTime = (startTimeStr: string) => {
+  const startTime = new Date(startTimeStr)
+  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000)
+  return formatForDateTimeInput(endTime.toISOString())
+}
+// Real data from backend
+const teachers = ref<any[]>([])
+const students = ref<any[]>([])
+const subjects = ref<any[]>([])
+
+// TomSelect instances
+let teacherSelect: any = null
+let studentSelect: any = null
+let subjectSelect: any = null
+
 const calendarOptions = ref({
   plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
   initialView: 'timeGridWeek',
@@ -54,30 +105,11 @@ const calendarOptions = ref({
     center: 'title',
     right: 'dayGridMonth,timeGridWeek,timeGridDay',
   },
-  events: [
-    {
-      id: '1',
-      title: 'Mathematics - John Smith',
-      start: '2025-11-06T10:00:00',
-      end: '2025-11-06T11:00:00',
-    },
-    {
-      id: '2',
-      title: 'Physics - Sarah Johnson',
-      start: '2024-01-16T14:00:00',
-      end: '2024-01-16T15:00:00',
-    },
-    {
-      id: '3',
-      title: 'Chemistry - Mike Davis',
-      start: '2025-11-06T11:00:00',
-      end: '2025-11-06T12:00:00',
-    },
-  ],
+  events: calendarEvents,
   slotMinTime: '08:00:00',
   slotMaxTime: '24:00:00',
   slotDuration: '00:15:00',
-  slotLabelInterval: '00:15:00',
+  slotLabelInterval: '01:00:00',
   slotLabelFormat: {
     hour: '2-digit',
     minute: '2-digit',
@@ -87,68 +119,224 @@ const calendarOptions = ref({
   allDaySlot: false,
   nowIndicator: true,
   editable: true,
-  selectable: true, // This enables date selection
+  selectable: true,
   selectMirror: true,
   weekends: true,
   dayHeaderFormat: { weekday: 'short', day: 'numeric' },
-  // Add these to ensure selection works properly
   select: handleDateSelect,
   eventClick: handleEventClick,
   eventDrop: handleEventDrop,
+  datesSet: (dateInfo: any) => {
+    console.log('Date range changed:', dateInfo)
+    fetchLessons(dateInfo.start, dateInfo.end)
+  },
+  // Add timezone configuration
+  timeZone: 'local', // Display in local timezone
+  eventTimeFormat: {
+    // Ensure event times show correctly
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  },
 })
+
+// Fetch dropdown data from backend
+const fetchDropdownData = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/api/dropdown-data', {
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch dropdown data')
+    }
+
+    const data = await response.json()
+    console.log('Dropdown data:', data)
+
+    teachers.value = data.teachers || []
+    students.value = data.students || []
+    subjects.value = data.subjects || []
+  } catch (error) {
+    console.error('Error fetching dropdown data:', error)
+    teachers.value = []
+    students.value = []
+    subjects.value = []
+  }
+}
+
+// Initialize TomSelect instances when modal opens
+const initializeTomSelect = () => {
+  // Wait for the DOM to be updated
+  nextTick(() => {
+    // Teacher select
+    if (teacherSelect) {
+      teacherSelect.destroy()
+    }
+    const teacherElement = document.getElementById('teacher') as HTMLSelectElement
+    if (teacherElement) {
+      teacherSelect = new TomSelect(teacherElement, {
+        valueField: 'id',
+        labelField: 'name',
+        searchField: ['name'],
+        options: teachers.value.map((teacher) => ({
+          id: teacher.id,
+          name: `${teacher.first_name} ${teacher.last_name}`,
+        })),
+        items: newLesson.value.teacher ? [newLesson.value.teacher] : [],
+        maxItems: 1,
+        create: false,
+        hidePlaceholder: true,
+        onChange: function (value: string) {
+          newLesson.value.teacher = value
+        },
+      })
+    }
+
+    // Student select
+    if (studentSelect) {
+      studentSelect.destroy()
+    }
+    const studentElement = document.getElementById('student') as HTMLSelectElement
+    if (studentElement) {
+      studentSelect = new TomSelect(studentElement, {
+        valueField: 'id',
+        labelField: 'name',
+        searchField: ['name'],
+        options: students.value.map((student) => ({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`,
+        })),
+        items: newLesson.value.student ? [newLesson.value.student] : [],
+        maxItems: 1,
+        create: false,
+        hidePlaceholder: true,
+        onChange: function (value: string) {
+          newLesson.value.student = value
+        },
+      })
+    }
+
+    // Subject select
+    if (subjectSelect) {
+      subjectSelect.destroy()
+    }
+    const subjectElement = document.getElementById('subject') as HTMLSelectElement
+    if (subjectElement) {
+      subjectSelect = new TomSelect(subjectElement, {
+        valueField: 'id',
+        labelField: 'name',
+        searchField: ['name'],
+        options: subjects.value.map((subject) => ({
+          id: subject.id,
+          name: subject.name,
+        })),
+        items: newLesson.value.subject ? [newLesson.value.subject] : [],
+        maxItems: 1,
+        create: false,
+        hidePlaceholder: true,
+        onChange: function (value: string) {
+          newLesson.value.subject = value
+        },
+      })
+    }
+  })
+}
 
 // Navigation functions
 const showUsers = () => (currentView.value = 'users')
-const showLessons = () => (currentView.value = 'lessons')
+const showLessons = () => {
+  currentView.value = 'lessons'
+  fetchDropdownData()
+}
 const showSettings = () => (currentView.value = 'settings')
 const goBack = () => (currentView.value = 'main')
 
 // Calendar event handlers
 function handleDateSelect(selectInfo: any) {
-  console.log('Selected date:', selectInfo)
+  console.log('Selected date (UTC):', selectInfo.startStr, selectInfo.endStr)
 
-  // Set the selected time slot
   selectedTimeSlot.value = selectInfo
-  newLesson.value.start = selectInfo.startStr
-  newLesson.value.end = selectInfo.endStr
 
-  // Open the modal
+  // Use the exact times from FullCalendar (already in correct timezone)
+  newLesson.value.start = formatForDateTimeInput(selectInfo.startStr)
+  newLesson.value.end = formatForDateTimeInput(selectInfo.endStr)
+
+  console.log('Formatted times:', newLesson.value.start, newLesson.value.end)
+
   showLessonModal.value = true
+  setTimeout(() => {
+    initializeTomSelect()
+  }, 100)
 
-  // Unselect the date range after selection
   selectInfo.view.calendar.unselect()
 }
 
 function handleEventClick(clickInfo: any) {
   console.log('Event clicked:', clickInfo)
-  // You can open an edit modal here
 }
 
 function handleEventDrop(dropInfo: any) {
   console.log('Event moved:', dropInfo)
-  // Update the lesson in your backend here
 }
 
 // Lesson creation functions
-const createLesson = () => {
-  console.log('Creating lesson:', newLesson.value)
+const createLesson = async () => {
+  // Validate required fields
+  if (!newLesson.value.teacher || !newLesson.value.student || !newLesson.value.subject) {
+    alert('Please fill in all required fields')
+    return
+  }
 
-  // Here you would typically send the data to your backend
-  // For now, we'll just log it and close the modal
+  try {
+    // Format the data for backend
+    const startTimeFormatted = newLesson.value.start + ':00'
+    const endTimeFormatted = newLesson.value.end + ':00'
 
-  // Reset the form
-  resetLessonForm()
-  showLessonModal.value = false
+    const lessonData = {
+      teacher_id: parseInt(newLesson.value.teacher),
+      student_id: parseInt(newLesson.value.student),
+      subject_id: parseInt(newLesson.value.subject),
+      start_time: startTimeFormatted, // Format: "2024-01-16T10:00:00"
+      end_time: endTimeFormatted, // Format: "2024-01-16T11:00:00"
+      is_recurring: newLesson.value.isRecurring,
+    }
 
-  // You can add the event to the calendar here
-  // calendarOptions.value.events.push({
-  //   id: Date.now().toString(),
-  //   title: `${newLesson.value.subject} - ${teachers.value.find(t => t.id === newLesson.value.teacher)?.name}`,
-  //   start: newLesson.value.start,
-  //   end: newLesson.value.end
-  // })
+    console.log('Sending lesson data:', lessonData)
+
+    const response = await fetch('http://localhost:8080/api/lessons', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(lessonData),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to create lesson')
+    }
+
+    const result = await response.json()
+    console.log('Lesson created successfully:', result)
+
+    // Show success message
+
+    // Reset and close
+    resetLessonForm()
+    showLessonModal.value = false
+
+    const calendarApi = selectedTimeSlot.value.view.calendar
+    fetchLessons(calendarApi.view.activeStart, calendarApi.view.activeEnd)
+    // You'll implement this in the next step
+  } catch (error) {
+    console.error('Error creating lesson:', error)
+    alert(`Failed to create lesson: ${error.message}`)
+  }
 }
 
+// Update resetLessonForm to include isRecurring
 const resetLessonForm = () => {
   newLesson.value = {
     teacher: '',
@@ -156,7 +344,12 @@ const resetLessonForm = () => {
     subject: '',
     start: '',
     end: '',
+    isRecurring: false,
   }
+
+  if (teacherSelect) teacherSelect.clear()
+  if (studentSelect) studentSelect.clear()
+  if (subjectSelect) subjectSelect.clear()
 }
 
 const closeModal = () => {
@@ -173,6 +366,31 @@ const formatSelectedTime = computed(() => {
 
   return `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 })
+const debugTimeHandling = () => {
+  const testDate = new Date()
+  console.log('Current local time:', testDate.toString())
+  console.log('Current UTC time:', testDate.toISOString())
+  console.log('Timezone offset (minutes):', testDate.getTimezoneOffset())
+}
+watch(
+  () => newLesson.value.start,
+  (newStartTime) => {
+    if (newStartTime) {
+      newLesson.value.end = calculateEndTime(newStartTime)
+    }
+  },
+)
+onMounted(() => {
+  debugTimeHandling()
+  fetchDropdownData()
+  const now = new Date()
+  const startOfWeek = new Date(now)
+  startOfWeek.setDate(now.getDate() - now.getDay() + 1) // Monday
+  const endOfWeek = new Date(now)
+  endOfWeek.setDate(now.getDate() - now.getDay() + 7) // Sunday
+
+  fetchLessons(startOfWeek, endOfWeek)
+})
 </script>
 
 <template>
@@ -187,43 +405,58 @@ const formatSelectedTime = computed(() => {
 
         <div class="modal-body">
           <!-- Selected Time Display -->
-          <div class="time-display">
-            <strong>Selected Time:</strong>
-            <span>{{ formatSelectedTime }}</span>
+          <div class="time-selection">
+            <div class="form-group time-input-group">
+              <label for="start-time">Start Time:</label>
+              <input
+                id="start-time"
+                v-model="newLesson.start"
+                type="datetime-local"
+                class="form-input time-input"
+                required
+              />
+            </div>
+            <div class="form-group time-input-group">
+              <label for="end-time">End Time:</label>
+              <input
+                id="end-time"
+                v-model="newLesson.end"
+                type="datetime-local"
+                class="form-input time-input"
+                required
+              />
+            </div>
           </div>
 
           <!-- Lesson Form -->
           <form @submit.prevent="createLesson" class="lesson-form">
             <div class="form-group">
               <label for="teacher">Teacher:</label>
-              <select id="teacher" v-model="newLesson.teacher" required class="form-select">
-                <option value="">Select a teacher</option>
-                <option v-for="teacher in teachers" :key="teacher.id" :value="teacher.id">
-                  {{ teacher.name }}
-                </option>
+              <select id="teacher" class="form-select">
+                <!-- No options here - TomSelect will populate them -->
               </select>
             </div>
 
             <div class="form-group">
               <label for="student">Student:</label>
-              <select id="student" v-model="newLesson.student" required class="form-select">
-                <option value="">Select a student</option>
-                <option v-for="student in students" :key="student.id" :value="student.id">
-                  {{ student.name }}
-                </option>
+              <select id="student" class="form-select">
+                <!-- No options here - TomSelect will populate them -->
               </select>
             </div>
 
             <div class="form-group">
               <label for="subject">Subject:</label>
-              <select id="subject" v-model="newLesson.subject" required class="form-select">
-                <option value="">Select a subject</option>
-                <option v-for="subject in subjects" :key="subject" :value="subject">
-                  {{ subject }}
-                </option>
+              <select id="subject" class="form-select">
+                <!-- No options here - TomSelect will populate them -->
               </select>
             </div>
-
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input v-model="newLesson.isRecurring" type="checkbox" class="checkbox-input" />
+                <span class="checkmark"></span>
+                Recurring Lesson (weekly at same time)
+              </label>
+            </div>
             <div class="form-actions">
               <button type="button" class="btn-cancel" @click="closeModal">Cancel</button>
               <button type="submit" class="btn-create">Create Lesson</button>
@@ -480,16 +713,12 @@ const formatSelectedTime = computed(() => {
 }
 
 .form-select {
-  padding: 0.75rem;
+  width: 100%;
+  min-height: 46px;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   font-size: 1rem;
   transition: border-color 0.3s ease;
-}
-
-.form-select:focus {
-  outline: none;
-  border-color: #38aad9;
 }
 
 .form-actions {
@@ -563,14 +792,184 @@ const formatSelectedTime = computed(() => {
   background: #38aad9;
   border: none;
   border-radius: 4px;
+  border-left: 4px solid #2a8fc7;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 :deep(.fc-event:hover) {
   background: #2a8fc7;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+:deep(.fc-event-title) {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Selection styling */
 :deep(.fc-highlight) {
   background: rgba(56, 170, 217, 0.2) !important;
+}
+.time-selection {
+  display: flex;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.time-input-group {
+  margin-bottom: 0;
+  width: 200px;
+}
+
+.time-input {
+  min-width: 0; /* Allow shrinking */
+  font-size: 0.9rem; /* Slightly smaller font */
+  padding: 0.6rem; /* Smaller padding */
+}
+.time-selection .form-group {
+  flex: 1;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #38aad9;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: normal;
+  margin: 0;
+}
+
+.checkbox-input {
+  display: none;
+}
+
+.checkmark {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.checkbox-input:checked + .checkmark {
+  background: #42993c;
+  border-color: #42993c;
+}
+
+.checkbox-input:checked + .checkmark::after {
+  content: '✓';
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+}
+</style>
+
+<style>
+/* TomSelect custom styles */
+.ts-wrapper {
+  border: none !important;
+  padding: 0 !important;
+  background: none !important;
+}
+
+.ts-control {
+  border: 2px solid #e0e0e0 !important;
+  border-radius: 8px !important;
+  padding: 0.75rem !important;
+  background: white !important;
+  box-shadow: none !important;
+  min-height: 46px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.ts-control.focus {
+  border-color: #38aad9 !important;
+  box-shadow: 0 0 0 2px rgba(56, 170, 217, 0.1) !important;
+}
+
+.ts-control input {
+  width: 100% !important;
+  font-size: 1rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+/* Fix TomSelect selected item display */
+.ts-control > div.item {
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+  display: block !important;
+}
+
+/* Hide placeholder when value is selected */
+.ts-control input::placeholder {
+  opacity: 1;
+}
+
+.ts-control.focus input::placeholder,
+.ts-control.has-items input::placeholder {
+  opacity: 0;
+}
+
+.ts-dropdown {
+  border: 2px solid #e0e0e0 !important;
+  border-radius: 8px !important;
+  margin-top: 4px !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+.ts-dropdown .active {
+  background-color: #38aad9 !important;
+  color: white !important;
+}
+
+.ts-dropdown .selected {
+  background-color: #6c0f5f !important;
+  color: white !important;
+}
+
+.ts-dropdown .option {
+  padding: 0.5rem 0.75rem !important;
+}
+
+.ts-dropdown .create {
+  padding: 0.5rem 0.75rem !important;
+}
+
+/* Hide the original select element */
+.tomselected.ts-hidden-accessible {
+  position: absolute !important;
+  opacity: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
 }
 </style>
