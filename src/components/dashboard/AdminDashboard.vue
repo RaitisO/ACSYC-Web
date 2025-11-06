@@ -109,7 +109,7 @@ const calendarOptions = ref({
   slotMinTime: '08:00:00',
   slotMaxTime: '24:00:00',
   slotDuration: '00:15:00',
-  slotLabelInterval: '01:00:00',
+  slotLabelInterval: '00:30:00',
   slotLabelFormat: {
     hour: '2-digit',
     minute: '2-digit',
