@@ -1,0 +1,60 @@
+/* Your exact color scheme and base styles */
+:root {
+  /* Your original colors */
+  --admin-primary: #6c0f5f;
+  --admin-secondary: #8a1a7a;
+  --student-primary: #ff9a1f;
+  --student-secondary: #e88a1a;
+  --teacher-primary: #38aad9;
+  --teacher-secondary: #2a8fc7;
+  --parent-primary: #9bbf19;
+  --parent-secondary: #87a916;
+  --success: #42993c;
+  --success-hover: #357c30;
+  --gray: #6c757d;
+  --gray-hover: #5a6268;
+  --bg-yellow: #fff9d8;
+  --white: #ffffff;
+  --light-gray: #f0f0f0;
+  --border-gray: #e0e0e0;
+  --text-dark: #333;
+
+  /* Your original spacing */
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-xxl: 3rem;
+
+  /* Your original shadows */
+  --shadow-sm: 0 4px 15px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 25px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Base styles matching your original design */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-yellow);
+  color: var(--text-dark);
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-bottom: 1rem;
+}
+
+h1 {
+  color: var(--admin-primary);
+}

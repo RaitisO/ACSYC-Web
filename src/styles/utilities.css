@@ -1,0 +1,243 @@
+/* Your exact connections section styles */
+.connections-section {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.message {
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.code-section,
+.connect-section,
+.connections-list {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.code-section h2,
+.connect-section h2,
+.connections-list h2 {
+  color: var(--admin-primary);
+  margin-bottom: 1rem;
+}
+
+.code-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.code-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--success);
+  background: #f8f9fa;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 2px dashed var(--success);
+  font-family: monospace;
+}
+
+.code-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.code-expiry {
+  font-size: 0.9rem;
+  color: var(--gray);
+  margin: 0;
+}
+
+.connect-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.code-input {
+  padding: 0.75rem;
+  border: 2px solid var(--border-gray);
+  border-radius: 8px;
+  font-size: 1.5rem;
+  font-family: monospace;
+  text-align: center;
+  width: 120px;
+  letter-spacing: 0.5rem;
+}
+
+.code-input:focus {
+  outline: none;
+  border-color: var(--teacher-primary);
+}
+
+.btn-primary {
+  background: var(--success);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--success-hover);
+  transform: translateY(-2px);
+}
+
+.btn-primary:disabled {
+  background: var(--gray);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background: var(--teacher-primary);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--teacher-secondary);
+  transform: translateY(-1px);
+}
+
+.no-connections {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.connections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.connection-card {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--teacher-primary);
+}
+
+.connection-info h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--admin-primary);
+}
+
+.connection-type {
+  font-weight: bold;
+  color: var(--success);
+  margin: 0 0 0.5rem 0;
+  text-transform: capitalize;
+}
+
+.connection-date {
+  font-size: 0.9rem;
+  color: var(--gray);
+  margin: 0;
+}
+
+/* Your exact TomSelect styles */
+.ts-wrapper {
+  border: none !important;
+  padding: 0 !important;
+  background: none !important;
+}
+
+.ts-control {
+  border: 2px solid var(--border-gray) !important;
+  border-radius: 8px !important;
+  padding: 0.75rem !important;
+  background: white !important;
+  box-shadow: none !important;
+  min-height: 46px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.ts-control.focus {
+  border-color: var(--teacher-primary) !important;
+  box-shadow: 0 0 0 2px rgba(56, 170, 217, 0.1) !important;
+}
+
+.ts-control input {
+  width: 100% !important;
+  font-size: 1rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.ts-control > div.item {
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+  display: block !important;
+}
+
+.ts-control input::placeholder {
+  opacity: 1;
+}
+
+.ts-control.focus input::placeholder,
+.ts-control.has-items input::placeholder {
+  opacity: 0;
+}
+
+.ts-dropdown {
+  border: 2px solid var(--border-gray) !important;
+  border-radius: 8px !important;
+  margin-top: 4px !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+.ts-dropdown .active {
+  background-color: var(--teacher-primary) !important;
+  color: white !important;
+}
+
+.ts-dropdown .selected {
+  background-color: var(--admin-primary) !important;
+  color: white !important;
+}
+
+.ts-dropdown .option {
+  padding: 0.5rem 0.75rem !important;
+}
+
+.tomselected.ts-hidden-accessible {
+  position: absolute !important;
+  opacity: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+}

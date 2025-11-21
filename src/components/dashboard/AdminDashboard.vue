@@ -103,7 +103,7 @@ const calendarOptions = ref({
   headerToolbar: {
     left: 'prev,next today',
     center: 'title',
-    right: 'dayGridMonth,timeGridWeek,timeGridDay',
+    right: 'timeGridWeek',
   },
   events: calendarEvents,
   slotMinTime: '08:00:00',

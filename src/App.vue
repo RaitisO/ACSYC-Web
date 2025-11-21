@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import NavigationBar from './components/NavigationBar.vue'
 import { useRoute } from 'vue-router'
+import '@/styles/base.css'
+import '@/styles/components.css'
+import '@/styles/dashboard.css'
+import '@/styles/utilities.css'
 
 const route = useRoute()
 import { onMounted } from 'vue'

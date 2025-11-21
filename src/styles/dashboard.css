@@ -1,0 +1,152 @@
+/* Your exact dashboard styles */
+.admin-dashboard,
+.student-dashboard,
+.teacher-dashboard,
+.parent-dashboard {
+  padding: 2rem;
+}
+
+.admin-grid,
+.student-grid,
+.teacher-grid,
+.parent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+/* Your exact card styles */
+.admin-card {
+  background: var(--admin-primary);
+  color: white;
+  padding: 2rem;
+  border-radius: 15px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.admin-card:hover {
+  background: var(--admin-secondary);
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.student-card {
+  background: var(--student-primary);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.student-card:hover {
+  background: var(--student-secondary);
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.teacher-card {
+  background: var(--teacher-primary);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.teacher-card:hover {
+  background: var(--teacher-secondary);
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.parent-card {
+  background: var(--parent-primary);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.parent-card:hover {
+  background: var(--parent-secondary);
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* Your exact card text styles */
+.admin-card h3,
+.student-card h3,
+.teacher-card h3,
+.parent-card h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.3rem;
+}
+
+.admin-card p,
+.student-card p,
+.teacher-card p,
+.parent-card p {
+  margin: 0;
+  opacity: 0.9;
+}
+
+/* Your exact section view styles */
+.section-view {
+  background: var(--bg-yellow);
+  border-radius: 15px;
+  padding: 2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--light-gray);
+}
+
+.section-header h1 {
+  margin: 0;
+  color: var(--admin-primary);
+}
+
+.section-content {
+  color: var(--text-dark);
+  line-height: 1.6;
+}
+
+/* Your exact back button styles */
+.back-btn {
+  background: var(--success);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 25px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.back-btn:hover {
+  background: var(--success-hover);
+  transform: translateX(-3px);
+}

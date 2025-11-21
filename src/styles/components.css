@@ -1,0 +1,241 @@
+/* Your exact modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 15px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 2px solid var(--light-gray);
+  background: var(--admin-primary);
+  color: white;
+  border-radius: 15px 15px 0 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+/* Your exact form styles */
+.lesson-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: bold;
+  color: var(--admin-primary);
+}
+
+.form-select,
+.form-input {
+  padding: 0.75rem;
+  border: 2px solid var(--border-gray);
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.form-select:focus,
+.form-input:focus {
+  outline: none;
+  border-color: var(--teacher-primary);
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.btn-cancel {
+  background: var(--gray);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.btn-cancel:hover {
+  background: var(--gray-hover);
+  transform: translateY(-2px);
+}
+
+.btn-create {
+  background: var(--success);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.btn-create:hover {
+  background: var(--success-hover);
+  transform: translateY(-2px);
+}
+
+/* Your exact time selection styles */
+.time-selection {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.time-input-group {
+  margin-bottom: 0;
+}
+
+.time-input {
+  min-width: 0;
+  font-size: 0.9rem;
+  padding: 0.6rem;
+}
+
+/* Your exact checkbox styles */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: normal;
+  margin: 0;
+}
+
+.checkbox-input {
+  display: none;
+}
+
+.checkmark {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-gray);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.checkbox-input:checked + .checkmark {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.checkbox-input:checked + .checkmark::after {
+  content: '✓';
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Your exact calendar styles */
+.calendar-container {
+  height: 70vh;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-gray);
+}
+
+/* FullCalendar custom styling */
+:deep(.fc) {
+  height: 100%;
+}
+
+:deep(.fc-header-toolbar) {
+  padding: 1rem;
+  margin-bottom: 0 !important;
+}
+
+:deep(.fc-toolbar-title) {
+  color: var(--admin-primary);
+  font-weight: bold;
+}
+
+:deep(.fc-button) {
+  background: var(--teacher-primary) !important;
+  border: none !important;
+}
+
+:deep(.fc-button:hover) {
+  background: var(--teacher-secondary) !important;
+}
+
+:deep(.fc-button-active) {
+  background: var(--admin-primary) !important;
+}
+
+:deep(.fc-event) {
+  background: var(--teacher-primary);
+  border: none;
+  border-radius: 4px;
+}
+
+:deep(.fc-event:hover) {
+  background: var(--teacher-secondary);
+}
+
+:deep(.fc-highlight) {
+  background: rgba(56, 170, 217, 0.2) !important;
+}
