@@ -12,7 +12,13 @@ defineOptions({
 
 const currentView = ref<'main' | 'users' | 'lessons' | 'settings'>('main')
 const showLessonModal = ref(false)
+const showEditModal = ref(false)
+const showMoveConfirmModal = ref(false)
 const selectedTimeSlot = ref<any>(null)
+const selectedLesson = ref<any>(null)
+const movedEventInfo = ref<any>(null)
+const calendarRef = ref<any>(null)
+
 const newLesson = ref({
   teacher: '',
   student: '',
@@ -21,23 +27,31 @@ const newLesson = ref({
   end: '',
   isRecurring: false,
 })
+
+// Convert UTC time from backend to local time for datetime inputs
 const formatForDateTimeInput = (dateStr: string) => {
   const date = new Date(dateStr)
-  // Use UTC methods to avoid timezone conversion
-  const year = date.getUTCFullYear()
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  const hours = String(date.getUTCHours()).padStart(2, '0')
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+
+  // Get local time components
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
 
   return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+// Convert local time to UTC for backend
+const formatForBackend = (dateTimeStr: string) => {
+  const date = new Date(dateTimeStr)
+  return date.toISOString().slice(0, 19) // Format: "2024-01-16T10:00:00"
 }
 const calendarEvents = ref<any[]>([])
 
 // Function to fetch lessons from backend
 const fetchLessons = async (start: Date, end: Date) => {
   try {
-    // Format dates for backend (YYYY-MM-DD)
     const startStr = start.toISOString().split('T')[0]
     const endStr = end.toISOString().split('T')[0]
 
@@ -57,7 +71,6 @@ const fetchLessons = async (start: Date, end: Date) => {
     const data = await response.json()
     console.log('Fetched lessons:', data.lessons)
 
-    // Transform backend data to FullCalendar events
     const events = data.lessons.map((lesson: any) => ({
       id: lesson.id.toString(),
       title: `${lesson.subject_name} - ${lesson.teacher_name}`,
@@ -76,17 +89,29 @@ const fetchLessons = async (start: Date, end: Date) => {
     }))
 
     calendarEvents.value = events
+    const calendarApi = getCalendarApi()
+    if (calendarApi) {
+      // Remove existing lesson events and add new ones
+      calendarApi.removeAllEvents()
+      calendarApi.addEventSource([
+        ...generateBreakPeriods(start, end),
+        ...generateAvailableSlots(start, end),
+        ...events,
+      ])
+    }
   } catch (error) {
     console.error('Error fetching lessons:', error)
     calendarEvents.value = []
   }
 }
+
 // Update the calculateEndTime function
 const calculateEndTime = (startTimeStr: string) => {
   const startTime = new Date(startTimeStr)
   const endTime = new Date(startTime.getTime() + 60 * 60 * 1000)
   return formatForDateTimeInput(endTime.toISOString())
 }
+
 // Real data from backend
 const teachers = ref<any[]>([])
 const students = ref<any[]>([])
@@ -105,7 +130,7 @@ const calendarOptions = ref({
     center: 'title',
     right: 'timeGridWeek',
   },
-  events: calendarEvents,
+  // REMOVE this line: events: calendarEvents,
   slotMinTime: '08:00:00',
   slotMaxTime: '24:00:00',
   slotDuration: '00:15:00',
@@ -130,15 +155,206 @@ const calendarOptions = ref({
     console.log('Date range changed:', dateInfo)
     fetchLessons(dateInfo.start, dateInfo.end)
   },
-  // Add timezone configuration
-  timeZone: 'local', // Display in local timezone
+  timeZone: 'local',
   eventTimeFormat: {
-    // Ensure event times show correctly
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   },
+
+  // Add business hours to highlight available lesson periods
+  businessHours: {
+    daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
+    startTime: '08:00',
+    endTime: '24:00',
+  },
+
+  // Add background events for break periods - FIXED VERSION
+  eventSources: [
+    {
+      events: function (fetchInfo: any, successCallback: any, failureCallback: any) {
+        const backgroundEvents = [
+          ...generateBreakPeriods(fetchInfo.start, fetchInfo.end),
+          ...generateAvailableSlots(fetchInfo.start, fetchInfo.end),
+        ]
+        successCallback(backgroundEvents)
+      },
+      color: 'transparent',
+      textColor: 'black',
+    },
+    // This will automatically include calendarEvents through the datesSet handler
+  ],
 })
+
+// Generate background events for break periods
+const generateBreakPeriods = (start: Date, end: Date) => {
+  const breakEvents = []
+  const current = new Date(start)
+
+  // Loop through each day in the visible range
+  while (current <= end) {
+    const dayOfWeek = current.getDay()
+
+    // Only show breaks on weekdays (1-5 = Monday-Friday) and Saturday (6)
+    if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+      const dayBreaks = generateBreaksForDay(current)
+      breakEvents.push(...dayBreaks)
+    }
+
+    // Move to next day
+    current.setDate(current.getDate() + 1)
+    current.setHours(0, 0, 0, 0)
+  }
+
+  return breakEvents
+}
+
+// Generate break periods for a specific day
+const generateBreaksForDay = (date: Date) => {
+  const breaks = []
+  const dayStart = new Date(date)
+  dayStart.setHours(8, 0, 0, 0) // Start at 8:00
+
+  // Lesson pattern: 2 lessons -> 15min break -> 2 lessons -> 15min break -> repeat
+  let currentTime = new Date(dayStart)
+
+  while (currentTime.getHours() < 24) {
+    // Add two 1-hour lesson blocks
+    const lessonBlock1End = new Date(currentTime)
+    lessonBlock1End.setHours(currentTime.getHours() + 2) // 2 hours for two lessons
+
+    // Add 15-minute break after two lessons
+    const breakStart = new Date(lessonBlock1End)
+    const breakEnd = new Date(breakStart)
+    breakEnd.setMinutes(breakStart.getMinutes() + 15)
+
+    // Only add break if it doesn't go past midnight
+    if (breakEnd.getHours() < 24) {
+      breaks.push({
+        start: breakStart.toISOString(),
+        end: breakEnd.toISOString(),
+        display: 'background',
+        color: '#ffebee', // Light red background for breaks
+        className: 'break-period',
+        title: 'Break Time',
+        extendedProps: {
+          type: 'break',
+        },
+      })
+    }
+
+    // Move to next lesson block (after break)
+    currentTime = new Date(breakEnd)
+
+    // Stop if we've reached the end of the day
+    if (currentTime.getHours() >= 24) break
+  }
+
+  return breaks
+}
+
+// Add this function to generate available lesson slots
+const generateAvailableSlots = (start: Date, end: Date) => {
+  const slotEvents = []
+  const current = new Date(start)
+
+  while (current <= end) {
+    const dayOfWeek = current.getDay()
+
+    // Only show available slots on weekdays (1-5 = Monday-Friday) and Saturday (6)
+    if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+      const daySlots = generateSlotsForDay(current)
+      slotEvents.push(...daySlots)
+    }
+
+    current.setDate(current.getDate() + 1)
+    current.setHours(0, 0, 0, 0)
+  }
+
+  return slotEvents
+}
+
+const generateSlotsForDay = (date: Date) => {
+  const slots = []
+  const dayStart = new Date(date)
+  dayStart.setHours(8, 0, 0, 0)
+
+  let currentTime = new Date(dayStart)
+
+  while (currentTime.getHours() < 24) {
+    // Check if this is a break period
+    const isBreakPeriod = isBreakTime(currentTime)
+
+    if (!isBreakPeriod) {
+      // This is an available lesson slot
+      const slotEnd = new Date(currentTime)
+      slotEnd.setHours(currentTime.getHours() + 1) // 1-hour lesson slots
+
+      // Only add slot if it doesn't go past midnight
+      if (slotEnd.getHours() < 24) {
+        slots.push({
+          start: currentTime.toISOString(),
+          end: slotEnd.toISOString(),
+          display: 'background',
+          color: 'rgba(56, 170, 217, 0.1)', // Very light blue for available slots
+          className: 'available-slot',
+          title: 'Available for Lessons',
+          extendedProps: {
+            type: 'available',
+          },
+        })
+      }
+    }
+
+    // Move to next 15-minute slot
+    currentTime = new Date(currentTime)
+    currentTime.setMinutes(currentTime.getMinutes() + 15)
+
+    // Stop if we've reached the end of the day
+    if (currentTime.getHours() >= 24) break
+  }
+
+  return slots
+}
+
+// Helper function to check if a time falls within break periods
+const isBreakTime = (time: Date) => {
+  const hour = time.getHours()
+  const minute = time.getMinutes()
+
+  // Break periods: 10:00-10:15, 12:15-12:30, 14:30-14:45, 16:45-17:00, etc.
+  // Pattern: every 2 hours starting from 10:00, breaks are 15 minutes
+
+  const totalMinutes = hour * 60 + minute
+  const minutesFromStart = totalMinutes - 8 * 60 // Minutes from 8:00
+
+  // Breaks occur every 120 minutes (2 hours of lessons) starting at 120 minutes from 8:00
+  const breakCycle = Math.floor((minutesFromStart - 120) / 135) // 120min lessons + 15min break
+
+  if (breakCycle >= 0) {
+    const breakStart = 120 + breakCycle * 135
+    const breakEnd = breakStart + 15
+
+    return minutesFromStart >= breakStart && minutesFromStart < breakEnd
+  }
+
+  return false
+}
+// Get calendar API instance
+const getCalendarApi = () => {
+  if (calendarRef.value) {
+    return calendarRef.value.getApi()
+  }
+  return null
+}
+
+// Refresh calendar events
+const refreshCalendar = () => {
+  const calendarApi = getCalendarApi()
+  if (calendarApi) {
+    fetchLessons(calendarApi.view.activeStart, calendarApi.view.activeEnd)
+  }
+}
 
 // Fetch dropdown data from backend
 const fetchDropdownData = async () => {
@@ -167,7 +383,6 @@ const fetchDropdownData = async () => {
 
 // Initialize TomSelect instances when modal opens
 const initializeTomSelect = () => {
-  // Wait for the DOM to be updated
   nextTick(() => {
     // Teacher select
     if (teacherSelect) {
@@ -243,6 +458,83 @@ const initializeTomSelect = () => {
   })
 }
 
+// Initialize TomSelect for edit modal
+const initializeEditTomSelect = () => {
+  nextTick(() => {
+    // Teacher select for edit modal
+    if (teacherSelect) {
+      teacherSelect.destroy()
+    }
+    const teacherElement = document.getElementById('edit-teacher') as HTMLSelectElement
+    if (teacherElement) {
+      teacherSelect = new TomSelect(teacherElement, {
+        valueField: 'id',
+        labelField: 'name',
+        searchField: ['name'],
+        options: teachers.value.map((teacher) => ({
+          id: teacher.id,
+          name: `${teacher.first_name} ${teacher.last_name}`,
+        })),
+        items: selectedLesson.value.teacherId ? [selectedLesson.value.teacherId.toString()] : [],
+        maxItems: 1,
+        create: false,
+        hidePlaceholder: true,
+        onChange: function (value: string) {
+          selectedLesson.value.teacherId = parseInt(value)
+        },
+      })
+    }
+
+    // Student select for edit modal
+    if (studentSelect) {
+      studentSelect.destroy()
+    }
+    const studentElement = document.getElementById('edit-student') as HTMLSelectElement
+    if (studentElement) {
+      studentSelect = new TomSelect(studentElement, {
+        valueField: 'id',
+        labelField: 'name',
+        searchField: ['name'],
+        options: students.value.map((student) => ({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`,
+        })),
+        items: selectedLesson.value.studentId ? [selectedLesson.value.studentId.toString()] : [],
+        maxItems: 1,
+        create: false,
+        hidePlaceholder: true,
+        onChange: function (value: string) {
+          selectedLesson.value.studentId = parseInt(value)
+        },
+      })
+    }
+
+    // Subject select for edit modal
+    if (subjectSelect) {
+      subjectSelect.destroy()
+    }
+    const subjectElement = document.getElementById('edit-subject') as HTMLSelectElement
+    if (subjectElement) {
+      subjectSelect = new TomSelect(subjectElement, {
+        valueField: 'id',
+        labelField: 'name',
+        searchField: ['name'],
+        options: subjects.value.map((subject) => ({
+          id: subject.id,
+          name: subject.name,
+        })),
+        items: selectedLesson.value.subjectId ? [selectedLesson.value.subjectId.toString()] : [],
+        maxItems: 1,
+        create: false,
+        hidePlaceholder: true,
+        onChange: function (value: string) {
+          selectedLesson.value.subjectId = parseInt(value)
+        },
+      })
+    }
+  })
+}
+
 // Navigation functions
 const showUsers = () => (currentView.value = 'users')
 const showLessons = () => {
@@ -252,17 +544,16 @@ const showLessons = () => {
 const showSettings = () => (currentView.value = 'settings')
 const goBack = () => (currentView.value = 'main')
 
-// Calendar event handlers
 function handleDateSelect(selectInfo: any) {
-  console.log('Selected date (UTC):', selectInfo.startStr, selectInfo.endStr)
+  console.log('Selected date (local):', selectInfo.start, selectInfo.end)
 
   selectedTimeSlot.value = selectInfo
 
-  // Use the exact times from FullCalendar (already in correct timezone)
-  newLesson.value.start = formatForDateTimeInput(selectInfo.startStr)
-  newLesson.value.end = formatForDateTimeInput(selectInfo.endStr)
+  // Use local times directly (FullCalendar already gives us local times)
+  newLesson.value.start = formatForDateTimeInput(selectInfo.start)
+  newLesson.value.end = formatForDateTimeInput(selectInfo.end)
 
-  console.log('Formatted times:', newLesson.value.start, newLesson.value.end)
+  console.log('Formatted local times:', newLesson.value.start, newLesson.value.end)
 
   showLessonModal.value = true
   setTimeout(() => {
@@ -274,10 +565,123 @@ function handleDateSelect(selectInfo: any) {
 
 function handleEventClick(clickInfo: any) {
   console.log('Event clicked:', clickInfo)
+
+  const event = clickInfo.event
+  selectedLesson.value = {
+    id: event.id,
+    title: event.title,
+    start: formatForDateTimeInput(event.startStr),
+    end: formatForDateTimeInput(event.endStr),
+    teacherId: event.extendedProps.teacherId,
+    studentId: event.extendedProps.studentId,
+    subjectId: event.extendedProps.subjectId,
+    isRecurring: event.extendedProps.isRecurring,
+    status: event.extendedProps.status,
+    teacherName: event.extendedProps.teacherName,
+    studentName: event.extendedProps.studentName,
+    subjectName: event.extendedProps.subjectName,
+  }
+
+  showEditModal.value = true
+  setTimeout(() => {
+    initializeEditTomSelect()
+  }, 100)
 }
 
 function handleEventDrop(dropInfo: any) {
   console.log('Event moved:', dropInfo)
+
+  const event = dropInfo.event
+
+  // Use local times from FullCalendar
+  const newStart = formatForDateTimeInput(event.startStr)
+  const newEnd = formatForDateTimeInput(event.endStr)
+
+  movedEventInfo.value = {
+    id: event.id,
+    title: event.title,
+    oldStart: event.extendedProps.oldStart || formatForDateTimeInput(dropInfo.oldEvent.startStr),
+    oldEnd: event.extendedProps.oldEnd || formatForDateTimeInput(dropInfo.oldEvent.endStr),
+    newStart: newStart,
+    newEnd: newEnd,
+    isRecurring: event.extendedProps.isRecurring,
+    teacherId: event.extendedProps.teacherId,
+    studentId: event.extendedProps.studentId,
+    subjectId: event.extendedProps.subjectId,
+    status: event.extendedProps.status,
+  }
+
+  // Store the original dates in extendedProps for later use
+  event.setExtendedProp('oldStart', movedEventInfo.value.oldStart)
+  event.setExtendedProp('oldEnd', movedEventInfo.value.oldEnd)
+
+  showMoveConfirmModal.value = true
+
+  // Revert the visual change until user confirms
+  dropInfo.revert()
+}
+
+// Confirm event move
+const confirmEventMove = async (applyToAll: boolean = false) => {
+  if (!movedEventInfo.value) return
+
+  try {
+    // Convert local times to UTC for backend
+    const startTimeFormatted = formatForBackend(movedEventInfo.value.newStart)
+    const endTimeFormatted = formatForBackend(movedEventInfo.value.newEnd)
+
+    const lessonData = {
+      teacher_id: movedEventInfo.value.teacherId,
+      student_id: movedEventInfo.value.studentId,
+      subject_id: movedEventInfo.value.subjectId,
+      start_time: startTimeFormatted,
+      end_time: endTimeFormatted,
+      is_recurring: movedEventInfo.value.isRecurring,
+      status: movedEventInfo.value.status,
+    }
+
+    console.log(
+      'Moving lesson (UTC):',
+      movedEventInfo.value.id,
+      lessonData,
+      'Apply to all:',
+      applyToAll,
+    )
+    console.log('Local times were:', movedEventInfo.value.newStart, movedEventInfo.value.newEnd)
+
+    const response = await fetch(`http://localhost:8080/api/lessons/${movedEventInfo.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(lessonData),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to move lesson')
+    }
+
+    const result = await response.json()
+    console.log('Lesson moved successfully:', result)
+
+    // Refresh calendar to show the updated event
+    refreshCalendar()
+  } catch (error) {
+    console.error('Error moving lesson:', error)
+    alert(`Failed to move lesson: ${error.message}`)
+  } finally {
+    showMoveConfirmModal.value = false
+    movedEventInfo.value = null
+  }
+}
+
+// Cancel event move
+const cancelEventMove = () => {
+  showMoveConfirmModal.value = false
+  movedEventInfo.value = null
+  // Calendar will already be reverted visually due to dropInfo.revert()
 }
 
 // Lesson creation functions
@@ -289,20 +693,24 @@ const createLesson = async () => {
   }
 
   try {
-    // Format the data for backend
-    const startTimeFormatted = newLesson.value.start + ':00'
-    const endTimeFormatted = newLesson.value.end + ':00'
+    // Convert local times to UTC for backend
+    const startTimeFormatted = formatForBackend(newLesson.value.start)
+    const endTimeFormatted = formatForBackend(newLesson.value.end)
 
     const lessonData = {
       teacher_id: parseInt(newLesson.value.teacher),
       student_id: parseInt(newLesson.value.student),
       subject_id: parseInt(newLesson.value.subject),
-      start_time: startTimeFormatted, // Format: "2024-01-16T10:00:00"
-      end_time: endTimeFormatted, // Format: "2024-01-16T11:00:00"
+      start_time: startTimeFormatted,
+      end_time: endTimeFormatted,
       is_recurring: newLesson.value.isRecurring,
+      recurrence_pattern: newLesson.value.isRecurring
+        ? newLesson.value.recurrencePattern
+        : undefined,
     }
 
-    console.log('Sending lesson data:', lessonData)
+    console.log('Sending lesson data (UTC):', lessonData)
+    console.log('Local times were:', newLesson.value.start, newLesson.value.end)
 
     const response = await fetch('http://localhost:8080/api/lessons', {
       method: 'POST',
@@ -321,18 +729,97 @@ const createLesson = async () => {
     const result = await response.json()
     console.log('Lesson created successfully:', result)
 
-    // Show success message
-
     // Reset and close
     resetLessonForm()
     showLessonModal.value = false
 
-    const calendarApi = selectedTimeSlot.value.view.calendar
-    fetchLessons(calendarApi.view.activeStart, calendarApi.view.activeEnd)
-    // You'll implement this in the next step
+    // Refresh calendar to show new lessons
+    refreshCalendar()
   } catch (error) {
     console.error('Error creating lesson:', error)
     alert(`Failed to create lesson: ${error.message}`)
+  }
+}
+// Update lesson function
+const updateLesson = async () => {
+  if (!selectedLesson.value) return
+
+  try {
+    // Convert local times to UTC for backend
+    const startTimeFormatted = formatForBackend(selectedLesson.value.start)
+    const endTimeFormatted = formatForBackend(selectedLesson.value.end)
+
+    const lessonData = {
+      teacher_id: selectedLesson.value.teacherId,
+      student_id: selectedLesson.value.studentId,
+      subject_id: selectedLesson.value.subjectId,
+      start_time: startTimeFormatted,
+      end_time: endTimeFormatted,
+      is_recurring: selectedLesson.value.isRecurring,
+      status: selectedLesson.value.status,
+    }
+
+    console.log('Updating lesson (UTC):', selectedLesson.value.id, lessonData)
+    console.log('Local times were:', selectedLesson.value.start, selectedLesson.value.end)
+
+    const response = await fetch(`http://localhost:8080/api/lessons/${selectedLesson.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(lessonData),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to update lesson')
+    }
+
+    const result = await response.json()
+    console.log('Lesson updated successfully:', result)
+
+    showEditModal.value = false
+    selectedLesson.value = null
+
+    // Refresh calendar to show updated lesson
+    refreshCalendar()
+  } catch (error) {
+    console.error('Error updating lesson:', error)
+    alert(`Failed to update lesson: ${error.message}`)
+  }
+}
+
+// Delete lesson function
+const deleteLesson = async () => {
+  if (!selectedLesson.value) return
+
+  if (!confirm('Are you sure you want to delete this lesson? This action cannot be undone.')) {
+    return
+  }
+
+  try {
+    const response = await fetch(`http://localhost:8080/api/lessons/${selectedLesson.value.id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to delete lesson')
+    }
+
+    const result = await response.json()
+    console.log('Lesson deleted successfully:', result)
+
+    showEditModal.value = false
+    selectedLesson.value = null
+
+    // Refresh calendar to remove deleted lesson
+    refreshCalendar()
+  } catch (error) {
+    console.error('Error deleting lesson:', error)
+    alert(`Failed to delete lesson: ${error.message}`)
   }
 }
 
@@ -357,6 +844,11 @@ const closeModal = () => {
   resetLessonForm()
 }
 
+const closeEditModal = () => {
+  showEditModal.value = false
+  selectedLesson.value = null
+}
+
 // Format date for display
 const formatSelectedTime = computed(() => {
   if (!selectedTimeSlot.value) return ''
@@ -366,12 +858,27 @@ const formatSelectedTime = computed(() => {
 
   return `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 })
+
+// Format date time for display in move confirmation
+const formatDateTime = (dateTimeStr: string) => {
+  const date = new Date(dateTimeStr)
+  return date.toLocaleString([], {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 const debugTimeHandling = () => {
   const testDate = new Date()
   console.log('Current local time:', testDate.toString())
   console.log('Current UTC time:', testDate.toISOString())
   console.log('Timezone offset (minutes):', testDate.getTimezoneOffset())
 }
+
 watch(
   () => newLesson.value.start,
   (newStartTime) => {
@@ -380,6 +887,16 @@ watch(
     }
   },
 )
+
+watch(
+  () => selectedLesson.value?.start,
+  (newStartTime) => {
+    if (newStartTime && selectedLesson.value) {
+      selectedLesson.value.end = calculateEndTime(newStartTime)
+    }
+  },
+)
+
 onMounted(() => {
   debugTimeHandling()
   fetchDropdownData()
@@ -390,6 +907,15 @@ onMounted(() => {
   endOfWeek.setDate(now.getDate() - now.getDay() + 7) // Sunday
 
   fetchLessons(startOfWeek, endOfWeek)
+})
+// Add with your other refs
+const recurringOption = ref<'this' | 'all'>('this')
+
+// Reset recurring option when modal opens
+watch(showMoveConfirmModal, (newVal) => {
+  if (newVal && movedEventInfo.value?.isRecurring) {
+    recurringOption.value = 'this'
+  }
 })
 </script>
 
@@ -466,6 +992,161 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Lesson Edit/Delete Modal -->
+    <div v-if="showEditModal" class="modal-overlay" @click="closeEditModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>Edit Lesson</h2>
+          <button class="close-btn" @click="closeEditModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Current Lesson Info -->
+          <div class="lesson-info" v-if="selectedLesson">
+            <div class="info-item">
+              <strong>Current:</strong> {{ selectedLesson.teacherName }} teaching
+              {{ selectedLesson.subjectName }} to {{ selectedLesson.studentName }}
+            </div>
+            <div class="info-item"><strong>Status:</strong> {{ selectedLesson.status }}</div>
+          </div>
+
+          <!-- Time Selection -->
+          <div class="time-selection">
+            <div class="form-group time-input-group">
+              <label for="edit-start-time">Start Time:</label>
+              <input
+                id="edit-start-time"
+                v-model="selectedLesson.start"
+                type="datetime-local"
+                class="form-input time-input"
+                required
+              />
+            </div>
+            <div class="form-group time-input-group">
+              <label for="edit-end-time">End Time:</label>
+              <input
+                id="edit-end-time"
+                v-model="selectedLesson.end"
+                type="datetime-local"
+                class="form-input time-input"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Edit Form -->
+          <form @submit.prevent="updateLesson" class="lesson-form">
+            <div class="form-group">
+              <label for="edit-teacher">Teacher:</label>
+              <select id="edit-teacher" class="form-select">
+                <!-- No options here - TomSelect will populate them -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-student">Student:</label>
+              <select id="edit-student" class="form-select">
+                <!-- No options here - TomSelect will populate them -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-subject">Subject:</label>
+              <select id="edit-subject" class="form-select">
+                <!-- No options here - TomSelect will populate them -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="status">Status:</label>
+              <select id="status" v-model="selectedLesson.status" class="form-select">
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input
+                  v-model="selectedLesson.isRecurring"
+                  type="checkbox"
+                  class="checkbox-input"
+                />
+                <span class="checkmark"></span>
+                Recurring Lesson
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-delete" @click="deleteLesson">Delete Lesson</button>
+              <div class="action-group">
+                <button type="button" class="btn-cancel" @click="closeEditModal">Cancel</button>
+                <button type="submit" class="btn-save">Save Changes</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Move Confirmation Modal -->
+    <div v-if="showMoveConfirmModal" class="modal-overlay" @click="cancelEventMove">
+      <div class="modal-content move-confirm-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Move Lesson</h2>
+          <button class="close-btn" @click="cancelEventMove">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="move-info" v-if="movedEventInfo">
+            <div class="info-section">
+              <h3>{{ movedEventInfo.title }}</h3>
+              <div class="time-change">
+                <div class="time-row">
+                  <span class="time-label">From:</span>
+                  <span class="time-value">{{ formatDateTime(movedEventInfo.oldStart) }}</span>
+                </div>
+                <div class="time-row">
+                  <span class="time-label">To:</span>
+                  <span class="time-value new-time">{{
+                    formatDateTime(movedEventInfo.newStart)
+                  }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="recurring-options" v-if="movedEventInfo.isRecurring">
+              <h4>This is a recurring lesson</h4>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" v-model="recurringOption" value="this" />
+                  <span class="radio-checkmark"></span>
+                  Change only this occurrence
+                </label>
+                <label class="radio-label">
+                  <input type="radio" v-model="recurringOption" value="all" />
+                  <span class="radio-checkmark"></span>
+                  Change all future occurrences
+                </label>
+              </div>
+            </div>
+
+            <div class="move-actions">
+              <button type="button" class="btn-cancel" @click="cancelEventMove">Cancel</button>
+              <button
+                type="button"
+                class="btn-save"
+                @click="confirmEventMove(recurringOption === 'all')"
+              >
+                {{ movedEventInfo.isRecurring ? 'Save Changes' : 'Move Lesson' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Admin Cards View -->
     <div v-if="currentView === 'main'">
       <h1>Admin Panel</h1>
@@ -505,7 +1186,7 @@ onMounted(() => {
       <div class="section-content">
         <!-- FullCalendar Component -->
         <div class="calendar-container">
-          <FullCalendar :options="calendarOptions" />
+          <FullCalendar ref="calendarRef" :options="calendarOptions" />
         </div>
       </div>
     </div>
@@ -681,7 +1362,7 @@ onMounted(() => {
   padding: 1.5rem;
 }
 
-.time-display {
+.lesson-info {
   background: #f8f9fa;
   padding: 1rem;
   border-radius: 8px;
@@ -689,10 +1370,48 @@ onMounted(() => {
   border-left: 4px solid #38aad9;
 }
 
-.time-display strong {
-  color: #6c0f5f;
-  display: block;
+.info-item {
   margin-bottom: 0.5rem;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.time-selection {
+  display: flex;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.time-input-group {
+  margin-bottom: 0;
+  width: 200px;
+}
+
+.time-input {
+  min-width: 0; /* Allow shrinking */
+  font-size: 0.9rem; /* Slightly smaller font */
+  padding: 0.6rem; /* Smaller padding */
+}
+
+.time-selection .form-group {
+  flex: 1;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #38aad9;
 }
 
 .lesson-form {
@@ -723,9 +1442,14 @@ onMounted(() => {
 
 .form-actions {
   display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 1rem;
+}
+
+.action-group {
+  display: flex;
+  gap: 1rem;
 }
 
 .btn-cancel {
@@ -744,7 +1468,8 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
-.btn-create {
+.btn-create,
+.btn-save {
   background: #42993c;
   color: white;
   border: none;
@@ -755,9 +1480,62 @@ onMounted(() => {
   transition: all 0.3s ease;
 }
 
-.btn-create:hover {
+.btn-create:hover,
+.btn-save:hover {
   background: #357c30;
   transform: translateY(-2px);
+}
+
+.btn-delete {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.btn-delete:hover {
+  background: #c82333;
+  transform: translateY(-2px);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: normal;
+  margin: 0;
+}
+
+.checkbox-input {
+  display: none;
+}
+
+.checkmark {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.checkbox-input:checked + .checkmark {
+  background: #42993c;
+  border-color: #42993c;
+}
+
+.checkbox-input:checked + .checkmark::after {
+  content: '✓';
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
 }
 
 /* FullCalendar custom styling */
@@ -815,40 +1593,73 @@ onMounted(() => {
 :deep(.fc-highlight) {
   background: rgba(56, 170, 217, 0.2) !important;
 }
-.time-selection {
-  display: flex;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-.time-input-group {
-  margin-bottom: 0;
-  width: 200px;
+.move-confirm-modal {
+  max-width: 500px;
 }
 
-.time-input {
-  min-width: 0; /* Allow shrinking */
-  font-size: 0.9rem; /* Slightly smaller font */
-  padding: 0.6rem; /* Smaller padding */
-}
-.time-selection .form-group {
-  flex: 1;
+.move-info {
+  text-align: center;
 }
 
-.form-input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #e0e0e0;
+.info-section h3 {
+  margin: 0 0 1rem 0;
+  color: #6c0f5f;
+  font-size: 1.2rem;
+}
+
+.time-change {
+  background: #f8f9fa;
+  padding: 1rem;
   border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.3s ease;
+  margin: 1rem 0;
+  border-left: 4px solid #38aad9;
 }
 
-.form-input:focus {
-  outline: none;
-  border-color: #38aad9;
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
-.checkbox-label {
+
+.time-row:last-child {
+  margin-bottom: 0;
+}
+
+.time-label {
+  font-weight: bold;
+  color: #6c757d;
+}
+
+.time-value {
+  color: #333;
+}
+
+.new-time {
+  color: #42993c;
+  font-weight: bold;
+}
+
+.recurring-options {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #fff3cd;
+  border-radius: 8px;
+  border-left: 4px solid #ffc107;
+}
+
+.recurring-options h4 {
+  margin: 0 0 1rem 0;
+  color: #856404;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.radio-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -857,31 +1668,44 @@ onMounted(() => {
   margin: 0;
 }
 
-.checkbox-input {
+.radio-label input[type='radio'] {
   display: none;
 }
 
-.checkmark {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #e0e0e0;
-  border-radius: 4px;
+.radio-checkmark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #6c757d;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
 }
 
-.checkbox-input:checked + .checkmark {
-  background: #42993c;
+.radio-label input[type='radio']:checked + .radio-checkmark {
   border-color: #42993c;
+  background: #42993c;
 }
 
-.checkbox-input:checked + .checkmark::after {
-  content: '✓';
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
+.radio-label input[type='radio']:checked + .radio-checkmark::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+}
+
+.move-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.move-actions .btn-cancel,
+.move-actions .btn-save {
+  min-width: 120px;
 }
 </style>
 
@@ -919,6 +1743,7 @@ onMounted(() => {
   box-shadow: none !important;
   outline: none !important;
 }
+
 /* Fix TomSelect selected item display */
 .ts-control > div.item {
   white-space: nowrap !important;
@@ -971,5 +1796,33 @@ onMounted(() => {
   padding: 0 !important;
   margin: 0 !important;
   border: none !important;
+}
+/* Break period styling */
+:deep(.break-period) {
+  background-color: #ffebee !important;
+  border: 1px solid #ffcdd2 !important;
+  opacity: 0.7;
+}
+
+/* Available slot styling */
+:deep(.available-slot) {
+  background-color: rgba(56, 170, 217, 0.05) !important;
+  border-left: 2px solid rgba(56, 170, 217, 0.3) !important;
+}
+
+/* Make regular lessons stand out more */
+:deep(.fc-event) {
+  z-index: 10 !important; /* Ensure lessons appear above background events */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Style for when hovering over available slots */
+:deep(.available-slot:hover) {
+  background-color: rgba(56, 170, 217, 0.1) !important;
+}
+
+/* Business hours styling */
+:deep(.fc-non-business) {
+  background-color: rgba(0, 0, 0, 0.03) !important;
 }
 </style>
