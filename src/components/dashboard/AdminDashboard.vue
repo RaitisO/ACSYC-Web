@@ -27,7 +27,173 @@ const newLesson = ref({
   end: '',
   isRecurring: false,
 })
+const searchQuery = ref('')
+const sortField = ref<'first_name' | 'last_name' | 'email' | 'role' | 'phone'>('first_name')
+const sortDirection = ref<'asc' | 'desc'>('asc')
+// Add with your other refs
+const expandedUserId = ref<number | null>(null)
+const selectedUserForConnection = ref<any>(null)
+const showConnectionModal = ref(false)
+const connectionType = ref<'teacher-student' | 'parent-student'>('teacher-student')
+const targetUserId = ref<number | null>(null)
 
+// Toggle user details expansion
+const toggleUserDetails = (userId: number) => {
+  expandedUserId.value = expandedUserId.value === userId ? null : userId
+}
+
+// Open connection creation modal
+const openConnectionModal = (user: any, type: 'teacher-student' | 'parent-student') => {
+  selectedUserForConnection.value = user
+  connectionType.value = type
+  targetUserId.value = null
+  showConnectionModal.value = true
+}
+
+// Create connection as admin
+const createConnection = async () => {
+  if (!selectedUserForConnection.value || !targetUserId.value) {
+    alert('Please select a target user')
+    return
+  }
+
+  try {
+    // Determine user IDs based on connection type
+    let user1Id, user2Id
+    
+    if (connectionType.value === 'teacher-student') {
+      // For teacher-student: selected user is teacher, target is student
+      if (selectedUserForConnection.value.role !== 'teacher') {
+        alert('For teacher-student connections, the first user must be a teacher')
+        return
+      }
+      user1Id = selectedUserForConnection.value.id
+      user2Id = targetUserId.value
+    } else {
+      // For parent-student: selected user is parent, target is student
+      if (selectedUserForConnection.value.role !== 'parent') {
+        alert('For parent-student connections, the first user must be a parent')
+        return
+      }
+      user1Id = selectedUserForConnection.value.id
+      user2Id = targetUserId.value
+    }
+
+    const connectionData = {
+      user1_id: user1Id,
+      user2_id: user2Id,
+      connection_type: connectionType.value,
+      created_by: selectedUserForConnection.value.id, // Admin creates it
+      skip_verification: true // Flag to bypass normal verification
+    }
+
+    console.log('Creating admin connection:', connectionData)
+
+    const response = await fetch('http://localhost:8080/api/admin/connections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(connectionData),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to create connection')
+    }
+
+    const result = await response.json()
+    console.log('Connection created successfully:', result)
+    
+    alert(`Connection created successfully between ${selectedUserForConnection.value.first_name} and the selected user!`)
+    showConnectionModal.value = false
+    selectedUserForConnection.value = null
+    targetUserId.value = null
+    
+    // Refresh user data to show new connections
+    fetchAllUsers()
+
+  } catch (error) {
+    console.error('Error creating connection:', error)
+    alert(`Failed to create connection: ${error.message}`)
+  }
+}
+
+// Get users eligible for connection with the selected user
+const getEligibleUsers = computed(() => {
+  if (!selectedUserForConnection.value) return []
+  
+  return allUsers.value.filter(user => {
+    // Don't include the selected user themselves
+    if (user.id === selectedUserForConnection.value.id) return false
+    
+    // Filter based on connection type
+    if (connectionType.value === 'teacher-student') {
+      // For teacher-student: selected user is teacher, need students
+      return user.role === 'student'
+    } else {
+      // For parent-student: selected user is parent, need students
+      return user.role === 'student'
+    }
+  })
+})
+
+const filteredUsers = computed(() => {
+  let filtered = [...allUsers.value]
+  
+  // Apply search filter
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim()
+    filtered = filtered.filter(user => 
+      user.first_name.toLowerCase().includes(query) ||
+      user.last_name.toLowerCase().includes(query) ||
+      user.email.toLowerCase().includes(query) ||
+      user.role.toLowerCase().includes(query) ||
+      (user.phone && user.phone.toLowerCase().includes(query))
+    )
+  }
+  
+  // Apply sorting
+  filtered.sort((a, b) => {
+    let aValue = a[sortField.value]
+    let bValue = b[sortField.value]
+    
+    // Handle undefined/null values
+    if (!aValue) aValue = ''
+    if (!bValue) bValue = ''
+    
+    // Convert to string for comparison
+    aValue = String(aValue).toLowerCase()
+    bValue = String(bValue).toLowerCase()
+    
+    if (sortDirection.value === 'asc') {
+      return aValue.localeCompare(bValue)
+    } else {
+      return bValue.localeCompare(aValue)
+    }
+  })
+  
+  return filtered
+})
+
+// Function to handle column sorting
+const sortBy = (field: 'first_name' | 'last_name' | 'email' | 'role' | 'phone') => {
+  if (sortField.value === field) {
+    // Toggle direction if clicking the same column
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    // New column, default to ascending
+    sortField.value = field
+    sortDirection.value = 'asc'
+  }
+}
+
+// Get sort indicator for a column
+const getSortIndicator = (field: string) => {
+  if (sortField.value !== field) return ''
+  return sortDirection.value === 'asc' ? '↑' : '↓'
+}
 // Convert UTC time from backend to local time for datetime inputs
 const formatForDateTimeInput = (dateStr: string) => {
   const date = new Date(dateStr)
@@ -130,16 +296,19 @@ const calendarOptions = ref({
     center: 'title',
     right: 'timeGridWeek',
   },
-  // REMOVE this line: events: calendarEvents,
+  events: [], // Start with empty array
   slotMinTime: '08:00:00',
   slotMaxTime: '24:00:00',
   slotDuration: '00:15:00',
-  slotLabelInterval: '00:30:00',
   slotLabelFormat: {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    meridiem: false,
   },
+  // Add more visual separation
+  slotEventOverlap: false,
+  eventMaxStack: 1,
   firstDay: 1,
   allDaySlot: false,
   nowIndicator: true,
@@ -161,29 +330,11 @@ const calendarOptions = ref({
     minute: '2-digit',
     hour12: false,
   },
-
-  // Add business hours to highlight available lesson periods
   businessHours: {
-    daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
+    daysOfWeek: [1, 2, 3, 4, 5, 6, 0],
     startTime: '08:00',
     endTime: '24:00',
   },
-
-  // Add background events for break periods - FIXED VERSION
-  eventSources: [
-    {
-      events: function (fetchInfo: any, successCallback: any, failureCallback: any) {
-        const backgroundEvents = [
-          ...generateBreakPeriods(fetchInfo.start, fetchInfo.end),
-          ...generateAvailableSlots(fetchInfo.start, fetchInfo.end),
-        ]
-        successCallback(backgroundEvents)
-      },
-      color: 'transparent',
-      textColor: 'black',
-    },
-    // This will automatically include calendarEvents through the datesSet handler
-  ],
 })
 
 // Generate background events for break periods
@@ -196,7 +347,7 @@ const generateBreakPeriods = (start: Date, end: Date) => {
     const dayOfWeek = current.getDay()
 
     // Only show breaks on weekdays (1-5 = Monday-Friday) and Saturday (6)
-    if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+    if (dayOfWeek >= 0 && dayOfWeek <= 6) {
       const dayBreaks = generateBreaksForDay(current)
       breakEvents.push(...dayBreaks)
     }
@@ -212,47 +363,39 @@ const generateBreakPeriods = (start: Date, end: Date) => {
 // Generate break periods for a specific day
 const generateBreaksForDay = (date: Date) => {
   const breaks = []
-  const dayStart = new Date(date)
-  dayStart.setHours(8, 0, 0, 0) // Start at 8:00
 
-  // Lesson pattern: 2 lessons -> 15min break -> 2 lessons -> 15min break -> repeat
-  let currentTime = new Date(dayStart)
+  // Predefined break times (more efficient than calculating)
+  const breakTimes = [
+    { start: '10:00', end: '10:15' },
+    { start: '12:15', end: '12:30' },
+    { start: '14:30', end: '14:45' },
+    { start: '16:45', end: '17:00' },
+    { start: '19:00', end: '19:15' },
+    { start: '21:15', end: '21:30' },
+  ]
 
-  while (currentTime.getHours() < 24) {
-    // Add two 1-hour lesson blocks
-    const lessonBlock1End = new Date(currentTime)
-    lessonBlock1End.setHours(currentTime.getHours() + 2) // 2 hours for two lessons
+  breakTimes.forEach((breakTime) => {
+    const breakStart = new Date(date)
+    const [startHour, startMinute] = breakTime.start.split(':').map(Number)
+    breakStart.setHours(startHour, startMinute, 0, 0)
 
-    // Add 15-minute break after two lessons
-    const breakStart = new Date(lessonBlock1End)
-    const breakEnd = new Date(breakStart)
-    breakEnd.setMinutes(breakStart.getMinutes() + 15)
+    const breakEnd = new Date(date)
+    const [endHour, endMinute] = breakTime.end.split(':').map(Number)
+    breakEnd.setHours(endHour, endMinute, 0, 0)
 
-    // Only add break if it doesn't go past midnight
-    if (breakEnd.getHours() < 24) {
-      breaks.push({
-        start: breakStart.toISOString(),
-        end: breakEnd.toISOString(),
-        display: 'background',
-        color: '#ffebee', // Light red background for breaks
-        className: 'break-period',
-        title: 'Break Time',
-        extendedProps: {
-          type: 'break',
-        },
-      })
-    }
-
-    // Move to next lesson block (after break)
-    currentTime = new Date(breakEnd)
-
-    // Stop if we've reached the end of the day
-    if (currentTime.getHours() >= 24) break
-  }
+    breaks.push({
+      start: breakStart.toISOString(),
+      end: breakEnd.toISOString(),
+      display: 'background',
+      color: '#ffebee',
+      className: 'break-period',
+      title: 'Break Time',
+      extendedProps: { type: 'break' },
+    })
+  })
 
   return breaks
 }
-
 // Add this function to generate available lesson slots
 const generateAvailableSlots = (start: Date, end: Date) => {
   const slotEvents = []
@@ -262,7 +405,7 @@ const generateAvailableSlots = (start: Date, end: Date) => {
     const dayOfWeek = current.getDay()
 
     // Only show available slots on weekdays (1-5 = Monday-Friday) and Saturday (6)
-    if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+    if (dayOfWeek >= 0 && dayOfWeek <= 6) {
       const daySlots = generateSlotsForDay(current)
       slotEvents.push(...daySlots)
     }
@@ -274,47 +417,27 @@ const generateAvailableSlots = (start: Date, end: Date) => {
   return slotEvents
 }
 
+// Replace generateSlotsForDay with this simpler version
 const generateSlotsForDay = (date: Date) => {
-  const slots = []
+  // Just create one background event for the entire available day
+  // This is much more performant than creating individual slots
   const dayStart = new Date(date)
   dayStart.setHours(8, 0, 0, 0)
 
-  let currentTime = new Date(dayStart)
+  const dayEnd = new Date(date)
+  dayEnd.setHours(24, 0, 0, 0)
 
-  while (currentTime.getHours() < 24) {
-    // Check if this is a break period
-    const isBreakPeriod = isBreakTime(currentTime)
-
-    if (!isBreakPeriod) {
-      // This is an available lesson slot
-      const slotEnd = new Date(currentTime)
-      slotEnd.setHours(currentTime.getHours() + 1) // 1-hour lesson slots
-
-      // Only add slot if it doesn't go past midnight
-      if (slotEnd.getHours() < 24) {
-        slots.push({
-          start: currentTime.toISOString(),
-          end: slotEnd.toISOString(),
-          display: 'background',
-          color: 'rgba(56, 170, 217, 0.1)', // Very light blue for available slots
-          className: 'available-slot',
-          title: 'Available for Lessons',
-          extendedProps: {
-            type: 'available',
-          },
-        })
-      }
-    }
-
-    // Move to next 15-minute slot
-    currentTime = new Date(currentTime)
-    currentTime.setMinutes(currentTime.getMinutes() + 15)
-
-    // Stop if we've reached the end of the day
-    if (currentTime.getHours() >= 24) break
-  }
-
-  return slots
+  return [
+    {
+      start: dayStart.toISOString(),
+      end: dayEnd.toISOString(),
+      display: 'background',
+      color: 'rgba(56, 170, 217, 0.03)',
+      className: 'available-slot',
+      title: 'Available for Lessons',
+      extendedProps: { type: 'available' },
+    },
+  ]
 }
 
 // Helper function to check if a time falls within break periods
@@ -355,7 +478,45 @@ const refreshCalendar = () => {
     fetchLessons(calendarApi.view.activeStart, calendarApi.view.activeEnd)
   }
 }
+// Add with your other refs
+const allUsers = ref<any[]>([])
+const showUserManagement = () => {
+  currentView.value = 'user-management'
+  fetchAllUsers()
+}
+// Fetch all users from backend
+const fetchAllUsers = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/api/users', {
+      credentials: 'include',
+    })
 
+    if (!response.ok) {
+      throw new Error('Failed to fetch users')
+    }
+
+    const data = await response.json()
+    console.log('Fetched all users:', data.users)
+    allUsers.value = data.users || []
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    allUsers.value = []
+  }
+}
+
+// Navigation function for user management
+const showUserManagementView = () => {
+  currentView.value = 'user-management'
+  fetchAllUsers()
+}
+
+// Placeholder function for manage user (to be implemented later)
+const manageUser = (user: any) => {
+  console.log('Managing user:', user)
+  alert(
+    `Manage user: ${user.first_name} ${user.last_name} (${user.role})\n\nThis feature will allow creating connections between users.`,
+  )
+}
 // Fetch dropdown data from backend
 const fetchDropdownData = async () => {
   try {
@@ -900,13 +1061,39 @@ watch(
 onMounted(() => {
   debugTimeHandling()
   fetchDropdownData()
-  const now = new Date()
-  const startOfWeek = new Date(now)
-  startOfWeek.setDate(now.getDate() - now.getDay() + 1) // Monday
-  const endOfWeek = new Date(now)
-  endOfWeek.setDate(now.getDate() - now.getDay() + 7) // Sunday
 
-  fetchLessons(startOfWeek, endOfWeek)
+  // Use nextTick to ensure the calendar is fully rendered
+  nextTick(() => {
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1)
+    const endOfWeek = new Date(now)
+    endOfWeek.setDate(now.getDate() - now.getDay() + 7)
+
+    // Manually set initial background events
+    const calendarApi = getCalendarApi()
+    if (calendarApi) {
+      const backgroundEvents = [
+        ...generateBreakPeriods(startOfWeek, endOfWeek),
+        ...generateAvailableSlots(startOfWeek, endOfWeek),
+      ]
+      calendarApi.addEventSource(backgroundEvents)
+      fetchLessons(startOfWeek, endOfWeek)
+    } else {
+      // If calendar API isn't available yet, try again after a short delay
+      setTimeout(() => {
+        const calendarApi = getCalendarApi()
+        if (calendarApi) {
+          const backgroundEvents = [
+            ...generateBreakPeriods(startOfWeek, endOfWeek),
+            ...generateAvailableSlots(startOfWeek, endOfWeek),
+          ]
+          calendarApi.addEventSource(backgroundEvents)
+          fetchLessons(startOfWeek, endOfWeek)
+        }
+      }, 100)
+    }
+  })
 })
 // Add with your other refs
 const recurringOption = ref<'this' | 'all'>('this')
@@ -917,6 +1104,26 @@ watch(showMoveConfirmModal, (newVal) => {
     recurringOption.value = 'this'
   }
 })
+// Placeholder functions for quick actions
+const editUserProfile = (user: any) => {
+  alert(`Edit profile for ${user.first_name} ${user.last_name} (Coming soon)`)
+}
+
+const resetUserPassword = (user: any) => {
+  if (confirm(`Reset password for ${user.first_name} ${user.last_name}?`)) {
+    alert(`Password reset link sent to ${user.email} (Coming soon)`)
+  }
+}
+
+const viewUserLessons = (user: any) => {
+  alert(`View lessons for ${user.first_name} ${user.last_name} (Coming soon)`)
+}
+
+const deactivateUser = (user: any) => {
+  if (confirm(`Deactivate ${user.first_name} ${user.last_name}? This will prevent them from logging in.`)) {
+    alert(`User ${user.first_name} ${user.last_name} deactivated (Coming soon)`)
+  }
+}
 </script>
 
 <template>
@@ -1146,14 +1353,85 @@ watch(showMoveConfirmModal, (newVal) => {
         </div>
       </div>
     </div>
+<!-- Connection Creation Modal -->
+<div v-if="showConnectionModal" class="modal-overlay" @click="showConnectionModal = false">
+  <div class="modal-content connection-modal" @click.stop>
+    <div class="modal-header">
+      <h2>Create Connection</h2>
+      <button class="close-btn" @click="showConnectionModal = false">×</button>
+    </div>
 
+    <div class="modal-body">
+      <div class="connection-info" v-if="selectedUserForConnection">
+        <div class="user-display">
+          <div class="user-avatar">
+            {{ selectedUserForConnection.first_name.charAt(0) }}{{ selectedUserForConnection.last_name.charAt(0) }}
+          </div>
+          <div class="user-details">
+            <h3>{{ selectedUserForConnection.first_name }} {{ selectedUserForConnection.last_name }}</h3>
+            <div class="user-meta">
+              <span class="role-badge" :class="`role-${selectedUserForConnection.role}`">
+                {{ selectedUserForConnection.role }}
+              </span>
+              <span class="connection-type">→ {{ connectionType.replace('-', ' to ') }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="connection-form">
+        <div class="form-group">
+          <label>Select {{ connectionType === 'teacher-student' ? 'Student' : 'Student' }} to Connect:</label>
+          <div class="users-selector">
+            <div 
+              v-for="targetUser in getEligibleUsers" 
+              :key="targetUser.id"
+              class="user-option"
+              :class="{ 'selected': targetUserId === targetUser.id }"
+              @click="targetUserId = targetUser.id"
+            >
+              <div class="option-avatar">
+                {{ targetUser.first_name.charAt(0) }}{{ targetUser.last_name.charAt(0) }}
+              </div>
+              <div class="option-details">
+                <div class="option-name">{{ targetUser.first_name }} {{ targetUser.last_name }}</div>
+                <div class="option-email">{{ targetUser.email }}</div>
+              </div>
+              <div class="option-check" v-if="targetUserId === targetUser.id">
+                ✓
+              </div>
+            </div>
+            
+            <div v-if="getEligibleUsers.length === 0" class="no-users">
+              No eligible users found for this connection type.
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-cancel" @click="showConnectionModal = false">
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            class="btn-create" 
+            @click="createConnection"
+            :disabled="!targetUserId"
+          >
+            Create Connection
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
     <!-- Main Admin Cards View -->
     <div v-if="currentView === 'main'">
       <h1>Admin Panel</h1>
       <div class="admin-grid">
-        <button class="admin-card" @click="showUsers">
+        <button class="admin-card" @click="showUserManagement">
           <h3>User Management</h3>
-          <p>Manage all users in the system</p>
+          <p>Create and manage user connections</p>
         </button>
         <button class="admin-card" @click="showLessons">
           <h3>All Lessons</h3>
@@ -1166,16 +1444,259 @@ watch(showMoveConfirmModal, (newVal) => {
       </div>
     </div>
 
-    <!-- User Management View -->
-    <div v-else-if="currentView === 'users'" class="section-view">
-      <div class="section-header">
-        <button @click="goBack" class="back-btn">← Back to Admin Panel</button>
-        <h1>User Management</h1>
+  <!-- User Management View -->
+<div v-else-if="currentView === 'user-management'" class="section-view">
+  <div class="section-header">
+    <button @click="goBack" class="back-btn">← Back to Admin Panel</button>
+    <h1>User Management</h1>
+  </div>
+  <div class="section-content">
+    <div class="users-header">
+      <h2>All System Users</h2>
+      <p>Manage user connections and profiles</p>
+    </div>
+    
+    <!-- Search Bar -->
+    <div class="search-container">
+      <div class="search-box">
+        <span class="search-icon" >🔍</span>
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search users by name, email, role, or phone..."
+          class="search-input"
+        />
+        <button 
+          v-if="searchQuery" 
+          @click="searchQuery = ''" 
+          class="clear-search"
+          title="Clear search"
+        >
+          ✕
+        </button>
       </div>
-      <div class="section-content">
-        <p>User management content coming soon...</p>
+      <div class="search-info" v-if="searchQuery">
+        Found {{ filteredUsers.length }} user{{ filteredUsers.length !== 1 ? 's' : '' }} matching "{{ searchQuery }}"
       </div>
     </div>
+    
+    <!-- Users Table -->
+<div class="users-table-container" v-if="filteredUsers.length > 0">
+  <table class="users-table">
+    <thead>
+      <tr>
+        <th @click="sortBy('first_name')" class="sortable-header">
+          <div class="header-content">
+            <span>Name</span>
+            <span class="sort-indicator">{{ getSortIndicator('first_name') }}</span>
+          </div>
+        </th>
+        <th @click="sortBy('email')" class="sortable-header">
+          <div class="header-content">
+            <span>Email</span>
+            <span class="sort-indicator">{{ getSortIndicator('email') }}</span>
+          </div>
+        </th>
+        <th @click="sortBy('role')" class="sortable-header">
+          <div class="header-content">
+            <span>Role</span>
+            <span class="sort-indicator">{{ getSortIndicator('role') }}</span>
+          </div>
+        </th>
+        <th @click="sortBy('phone')" class="sortable-header">
+          <div class="header-content">
+            <span>Phone</span>
+            <span class="sort-indicator">{{ getSortIndicator('phone') }}</span>
+          </div>
+        </th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template v-for="user in filteredUsers" :key="user.id">
+        <!-- User Row -->
+        <tr class="user-row">
+          <td class="user-name">
+            <strong>{{ user.first_name }} {{ user.last_name }}</strong>
+            <div class="user-id">ID: {{ user.id }}</div>
+          </td>
+          <td class="user-email">{{ user.email }}</td>
+          <td class="user-role">
+            <span :class="`role-badge role-${user.role}`">
+              {{ user.role }}
+            </span>
+          </td>
+          <td class="user-phone">{{ user.phone || 'N/A' }}</td>
+          <td class="user-actions">
+            <button 
+              @click="toggleUserDetails(user.id)" 
+              class="btn-manage"
+              :title="`${expandedUserId === user.id ? 'Hide' : 'Show'} details for ${user.first_name} ${user.last_name}`"
+            >
+              {{ expandedUserId === user.id ? 'Hide' : 'Manage' }}
+            </button>
+          </td>
+        </tr>
+
+        <!-- Expanded Details Row (only show if this user is expanded) -->
+        <tr v-if="expandedUserId === user.id" class="user-details-row">
+          <td colspan="5" class="details-container">
+            <div class="user-details">
+              <div class="details-grid">
+                <!-- User Information -->
+                <div class="details-section">
+                  <h4>User Information</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">Full Name:</span>
+                      <span class="info-value">{{ user.first_name }} {{ user.last_name }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Email:</span>
+                      <span class="info-value">{{ user.email }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Phone:</span>
+                      <span class="info-value">{{ user.phone || 'Not provided' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Date of Birth:</span>
+                      <span class="info-value">{{ user.date_of_birth || 'Not provided' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Account Created:</span>
+                      <span class="info-value">{{ new Date(user.created_at).toLocaleDateString() }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">User ID:</span>
+                      <span class="info-value code">{{ user.id }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Connection Management -->
+                <div class="details-section">
+                  <h4>Connection Management</h4>
+                  <div class="connection-actions">
+                    <div v-if="user.role === 'teacher'" class="action-group">
+                      <h5>Connect as Teacher</h5>
+                      <p class="action-description">
+                        Create teacher-student connection with a student
+                      </p>
+                      <button 
+                        @click="openConnectionModal(user, 'teacher-student')"
+                        class="btn-action"
+                      >
+                        📚 Connect to Student
+                      </button>
+                    </div>
+                    
+                    <div v-if="user.role === 'parent'" class="action-group">
+                      <h5>Connect as Parent</h5>
+                      <p class="action-description">
+                        Create parent-student connection with a student
+                      </p>
+                      <button 
+                        @click="openConnectionModal(user, 'parent-student')"
+                        class="btn-action"
+                      >
+                        👨‍👧 Connect to Student
+                      </button>
+                    </div>
+                    
+                    <div v-if="user.role === 'student'" class="action-group">
+                      <h5>Connect Student To</h5>
+                      <p class="action-description">
+                        This user is a student. Connect them to a teacher or parent from their manage view.
+                      </p>
+                      <div class="student-connections">
+                        <button class="btn-action disabled" disabled>
+                          👨‍🏫 Connect to Teacher
+                        </button>
+                        <button class="btn-action disabled" disabled>
+                          👨‍👧 Connect to Parent
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div v-if="user.role === 'admin'" class="action-group">
+                      <h5>Admin User</h5>
+                      <p class="action-description">
+                        Admin users don't participate in teacher-student/parent-student connections.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="details-section">
+                  <h4>Quick Actions</h4>
+                  <div class="quick-actions">
+                    <button class="btn-quick-action" @click="editUserProfile(user)">
+                      ✏️ Edit Profile
+                    </button>
+                    <button class="btn-quick-action" @click="resetUserPassword(user)">
+                      🔒 Reset Password
+                    </button>
+                    <button class="btn-quick-action" @click="viewUserLessons(user)">
+                      📅 View Lessons
+                    </button>
+                    <button class="btn-quick-action btn-danger" @click="deactivateUser(user)">
+                      ⚠️ Deactivate User
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+    
+    <!-- Empty State -->
+    <div v-else class="empty-state">
+      <div class="empty-icon">👥</div>
+      <h3>{{ searchQuery ? 'No Matching Users' : 'No Users Found' }}</h3>
+      <p v-if="searchQuery">
+        No users found matching "{{ searchQuery }}". Try a different search term.
+      </p>
+      <p v-else>There are no users registered in the system yet.</p>
+      <button 
+        v-if="searchQuery" 
+        @click="searchQuery = ''" 
+        class="btn-clear-search"
+      >
+        Clear Search
+      </button>
+    </div>
+    
+    <!-- Statistics -->
+    <div class="user-stats" v-if="allUsers.length > 0">
+      <div class="stat-card">
+        <div class="stat-number">{{ allUsers.length }}</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">{{ allUsers.filter(u => u.role === 'student').length }}</div>
+        <div class="stat-label">Students</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">{{ allUsers.filter(u => u.role === 'teacher').length }}</div>
+        <div class="stat-label">Teachers</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">{{ allUsers.filter(u => u.role === 'parent').length }}</div>
+        <div class="stat-label">Parents</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number">{{ allUsers.filter(u => u.role === 'admin').length }}</div>
+        <div class="stat-label">Admins</div>
+      </div>
+    </div>
+  </div>
+</div>
 
     <!-- Lessons View -->
     <div v-else-if="currentView === 'lessons'" class="section-view">
@@ -1824,5 +2345,650 @@ watch(showMoveConfirmModal, (newVal) => {
 /* Business hours styling */
 :deep(.fc-non-business) {
   background-color: rgba(0, 0, 0, 0.03) !important;
+}
+/* Enhanced available slot styling */
+:deep(.available-slot) {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(56, 170, 217, 0.05),
+    rgba(56, 170, 217, 0.05) 10px,
+    rgba(56, 170, 217, 0.08) 10px,
+    rgba(56, 170, 217, 0.08) 20px
+  ) !important;
+  border-left: 3px solid rgba(56, 170, 217, 0.3) !important;
+  border-right: 1px solid rgba(56, 170, 217, 0.1) !important;
+}
+
+/* Make break periods more distinct */
+:deep(.break-period) {
+  background: repeating-linear-gradient(
+    -45deg,
+    #ffebee,
+    #ffebee 10px,
+    #ffcdd2 10px,
+    #ffcdd2 20px
+  ) !important;
+  border: 2px solid #ffcdd2 !important;
+  opacity: 0.8;
+}
+
+/* Highlight the current time slot */
+:deep(.fc-timegrid-now-indicator-line) {
+  border-color: #ff6b6b !important;
+  border-width: 2px !important;
+}
+
+/* Style for actual lessons to stand out more */
+:deep(.fc-event) {
+  z-index: 100 !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16) !important;
+  border: none !important;
+  font-weight: 600 !important;
+}
+
+/* Hover effects */
+:deep(.available-slot:hover) {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(56, 170, 217, 0.1),
+    rgba(56, 170, 217, 0.1) 10px,
+    rgba(56, 170, 217, 0.15) 10px,
+    rgba(56, 170, 217, 0.15) 20px
+  ) !important;
+} /* User Management Styles */
+.users-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.users-header h2 {
+  color: #6c0f5f;
+  margin-bottom: 0.5rem;
+}
+
+.users-header p {
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.users-table-container {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th {
+  background: #6c0f5f;
+  color: white;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.users-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.user-row:hover {
+  background: #f8f9fa;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.user-email {
+  color: #666;
+}
+
+.user-role {
+  text-transform: capitalize;
+}
+
+.role-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.role-student {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.role-teacher {
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+.role-parent {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.role-admin {
+  background: #fce4ec;
+  color: #c2185b;
+}
+
+.user-phone {
+  color: #666;
+  font-family: monospace;
+}
+
+.user-actions {
+  text-align: center;
+}
+
+.btn-manage {
+  background: #38aad9;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.btn-manage:hover {
+  background: #2a8fc7;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  color: #6c0f5f;
+  margin-bottom: 0.5rem;
+}
+
+/* User Statistics */
+.user-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.stat-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #6c0f5f;
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #6c0f5f;
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  color: #666;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+/* Search Bar Styles */
+.search-container {
+  margin-bottom: 2rem;
+}
+
+.search-box {
+  position: relative;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c0f5f;
+  font-size: 1.2rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 3rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 25px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #6c0f5f;
+  box-shadow: 0 0 0 3px rgba(108, 15, 95, 0.1);
+}
+
+.clear-search {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.3s ease;
+}
+
+.clear-search:hover {
+  background: #5a6268;
+}
+
+.search-info {
+  text-align: center;
+  margin-top: 0.5rem;
+  color: #6c0f5f;
+  font-size: 0.9rem;
+}
+
+.btn-clear-search {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 1rem;
+  transition: all 0.3s ease;
+}
+
+.btn-clear-search:hover {
+  background: #5a6268;
+}
+
+/* Sortable Table Headers */
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.3s ease;
+}
+
+.sortable-header:hover {
+  background: rgba(108, 15, 95, 0.1);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 0.5rem;
+}
+
+.sort-indicator {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.sortable-header:hover .sort-indicator {
+  opacity: 1;
+}
+
+/* Enhanced User Table Styles */
+.user-name {
+  position: relative;
+}
+
+.user-id {
+  font-size: 0.75rem;
+  color: #6c757d;
+  margin-top: 0.25rem;
+  font-family: monospace;
+  opacity: 0.7;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .users-table-container {
+    overflow-x: auto;
+  }
+  
+  .users-table {
+    min-width: 700px;
+  }
+  
+  .search-input {
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem 0.6rem 2.5rem;
+  }
+  
+  .search-icon {
+    left: 0.8rem;
+    font-size: 1rem;
+  }
+  
+  .user-stats {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+  
+  .stat-number {
+    font-size: 1.5rem;
+  }
+}
+/* User Details Row */
+.user-details-row {
+  background: #f8f9fa;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.details-container {
+  padding: 0 !important;
+}
+
+.user-details {
+  padding: 1.5rem;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.details-section {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.details-section h4 {
+  color: #6c0f5f;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-label {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-bottom: 0.25rem;
+}
+
+.info-value {
+  font-weight: 500;
+  color: #333;
+}
+
+.info-value.code {
+  font-family: monospace;
+  background: #f8f9fa;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* Connection Actions */
+.connection-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.action-group h5 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.action-description {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.btn-action {
+  background: #38aad9;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  width: 100%;
+  text-align: center;
+}
+
+.btn-action:hover {
+  background: #2a8fc7;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn-action.disabled {
+  background: #e0e0e0;
+  color: #999;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.student-connections {
+  display: flex;
+  gap: 1rem;
+}
+
+.student-connections .btn-action {
+  flex: 1;
+}
+
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.btn-quick-action {
+  background: white;
+  border: 2px solid #e0e0e0;
+  color: #333;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-quick-action:hover {
+  border-color: #6c0f5f;
+  background: #f8f9fa;
+  transform: translateX(5px);
+}
+
+.btn-quick-action.btn-danger {
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.btn-quick-action.btn-danger:hover {
+  background: #dc3545;
+  color: white;
+}
+
+/* Connection Modal */
+.connection-modal {
+  max-width: 600px;
+}
+
+.user-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.user-avatar {
+  width: 50px;
+  height: 50px;
+  background: #6c0f5f;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.user-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.connection-type {
+  font-weight: 600;
+  color: #6c0f5f;
+}
+
+.users-selector {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+
+.user-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.3s ease;
+}
+
+.user-option:hover {
+  background: #f8f9fa;
+}
+
+.user-option.selected {
+  background: #e3f2fd;
+  border-left: 4px solid #1976d2;
+}
+
+.user-option:last-child {
+  border-bottom: none;
+}
+
+.option-avatar {
+  width: 40px;
+  height: 40px;
+  background: #6c757d;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.option-details {
+  flex: 1;
+}
+
+.option-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.option-email {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.option-check {
+  color: #1976d2;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.no-users {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .student-connections {
+    flex-direction: column;
+  }
+  
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
