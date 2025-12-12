@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import ConnectionsSection from '@/components/ConnectionsSection.vue'
 import ProfileSection from '@/components/ProfileSection.vue'
+import type { StudentMiroBoard } from '@/types/calendar'
 
 interface UpcomingLesson {
   id: number
@@ -20,9 +21,16 @@ const currentView = ref<'main' | 'teachers' | 'progress' | 'connections' | 'prof
 
 const upcomingLessons = ref<UpcomingLesson[]>([])
 const isLoadingLessons = ref(false)
+const studentMiroBoards = ref<StudentMiroBoard[]>([])
+const isLoadingBoards = ref(false)
+const connectedTeachers = ref<any[]>([])
+const isLoadingTeachers = ref(false)
 
 // Navigation functions
-const showTeachers = () => (currentView.value = 'teachers')
+const showTeachers = () => {
+  currentView.value = 'teachers'
+  fetchConnectedTeachers()
+}
 const showProgress = () => (currentView.value = 'progress')
 const showConnections = () => (currentView.value = 'connections')
 const showProfile = () => (currentView.value = 'profile')
@@ -81,8 +89,61 @@ const fetchUpcomingLessons = async () => {
   }
 }
 
+// Fetch student's Miro boards
+const fetchStudentMiroBoards = async () => {
+  isLoadingBoards.value = true
+  try {
+    // Get student ID from localStorage user object
+    const storedUser = localStorage.getItem('user')
+    if (!storedUser) {
+      throw new Error('User data not found')
+    }
+
+    const user = JSON.parse(storedUser)
+    const studentId = user.id
+
+    const response = await fetch(`http://localhost:8080/api/students/${studentId}/miro-boards`, {
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Miro boards')
+    }
+
+    const data = await response.json()
+    studentMiroBoards.value = data.miroBoards || []
+  } catch (error) {
+    console.error('Error fetching Miro boards:', error)
+    studentMiroBoards.value = []
+  } finally {
+    isLoadingBoards.value = false
+  }
+}
+
+// Fetch connected teachers
+const fetchConnectedTeachers = async () => {
+  isLoadingTeachers.value = true
+  try {
+    const response = await fetch('http://localhost:8080/api/connected-users', {
+      credentials: 'include',
+    })
+
+    if (!response.ok) throw new Error('Failed to fetch connected teachers')
+
+    const data = await response.json()
+    // Filter to only show teachers
+    connectedTeachers.value = data.connected_users.filter((user: any) => user.role === 'teacher')
+  } catch (error) {
+    console.error('Error fetching connected teachers:', error)
+    connectedTeachers.value = []
+  } finally {
+    isLoadingTeachers.value = false
+  }
+}
+
 onMounted(() => {
   fetchUpcomingLessons()
+  fetchStudentMiroBoards()
 })
 </script>
 
@@ -115,24 +176,27 @@ onMounted(() => {
         <div class="lessons-header">
           <h2>Next 5 Upcoming Lessons</h2>
           <div class="lesson-actions">
-            <button
+            <!-- Dynamic Miro Boards -->
+            <a
+              v-for="board in studentMiroBoards"
+              :key="board.id"
+              :href="board.board_url"
+              target="_blank"
+              rel="noopener noreferrer"
               class="action-btn miro-btn"
-              @click="() => window.open('https://miro.com', '_blank')"
             >
-              Miro
-            </button>
-            <button
+              {{ board.board_name }}
+            </a>
+
+            <!-- Fixed Zoom Button -->
+            <a
+              href="https://us06web.zoom.us/j/81527478663?pwd=PVjqkEwm3S31tfnQ4DqWUrYDJoLZpK.1"
+              target="_blank"
+              rel="noopener noreferrer"
               class="action-btn zoom-btn"
-              @click="
-                () =>
-                  window.open(
-                    'https://us06web.zoom.us/j/81527478663?pwd=PVjqkEwm3S31tfnQ4DqWUrYDJoLZpK.1',
-                    '_blank',
-                  )
-              "
             >
               Zoom
-            </button>
+            </a>
           </div>
         </div>
 
@@ -171,7 +235,38 @@ onMounted(() => {
         <h1>My Teachers</h1>
       </div>
       <div class="section-content">
-        <p>Teachers content coming soon...</p>
+        <div v-if="isLoadingTeachers" class="loading">
+          <p>Loading teachers...</p>
+        </div>
+
+        <div v-else-if="connectedTeachers.length === 0" class="no-teachers">
+          <div class="empty-state">
+            <h3>No Teachers Connected Yet</h3>
+            <p>
+              You haven't connected with any teachers yet. Use the Connections section to connect
+              with your teachers.
+            </p>
+            <button @click="showConnections" class="btn-primary">Go to Connections</button>
+          </div>
+        </div>
+
+        <div v-else class="teachers-list">
+          <h2>Connected Teachers ({{ connectedTeachers.length }})</h2>
+          <div class="teachers-grid">
+            <div v-for="teacher in connectedTeachers" :key="teacher.id" class="teacher-card">
+              <div class="teacher-avatar">
+                {{ teacher.first_name.charAt(0) }}{{ teacher.last_name.charAt(0) }}
+              </div>
+              <div class="teacher-info">
+                <h3>{{ teacher.first_name }} {{ teacher.last_name }}</h3>
+                <p class="teacher-email">{{ teacher.email }}</p>
+                <p class="connection-date">
+                  Connected: {{ new Date(teacher.connected_at).toLocaleDateString() }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -271,6 +366,9 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.3s ease;
   white-space: nowrap;
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
 }
 .miro-btn {
   background: #ffd500;
@@ -329,5 +427,84 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.teacher-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.3s ease;
+}
+
+.teacher-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #ffc107;
+}
+
+.teacher-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffc107, #ff9800);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.teacher-info {
+  flex: 1;
+}
+
+.teacher-info h3 {
+  margin: 0 0 4px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.teacher-email {
+  color: #666;
+  font-size: 14px;
+  margin: 0 0 4px 0;
+}
+
+.connection-date {
+  color: #999;
+  font-size: 12px;
+  margin: 0;
+}
+
+.teachers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.no-teachers {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.empty-state {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 30px;
+}
+
+.empty-state h3 {
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: #666;
+  margin-bottom: 20px;
 }
 </style>

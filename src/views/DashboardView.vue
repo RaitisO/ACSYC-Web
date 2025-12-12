@@ -9,31 +9,67 @@ const user = ref({
   email: '',
   role: '',
 })
+const isSessionValid = ref(false)
+const isCheckingSession = ref(true)
 
 const logout = async () => {
   try {
     await fetch('http://localhost:8080/api/logout', {
       method: 'POST',
-      //credentials: 'include', Important for sessions
+      credentials: 'include',
     })
 
     localStorage.removeItem('user')
     router.push('/')
   } catch (error) {
     console.error('Logout error:', error)
+    localStorage.removeItem('user')
+    router.push('/')
   }
 }
+
+// Validate session with backend
+const validateSession = async () => {
+  isCheckingSession.value = true
+  try {
+    const response = await fetch('http://localhost:8080/api/profile', {
+      method: 'GET',
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      // Session is invalid (server doesn't recognize the session)
+      throw new Error('Session invalid')
+    }
+
+    // Session is valid
+    isSessionValid.value = true
+  } catch (error) {
+    console.error('Session validation failed:', error)
+    // Clear localStorage and redirect to login
+    localStorage.removeItem('user')
+    isSessionValid.value = false
+    router.push('/login')
+  } finally {
+    isCheckingSession.value = false
+  }
+}
+
 import AdminDashboard from '@/components/dashboard/AdminDashboard.vue'
 import TeacherDashboard from '@/components/dashboard/TeacherDashboard.vue'
 import StudentDashboard from '@/components/dashboard/StudentDashboard.vue'
 import ParentDashboard from '@/components/dashboard/ParentDashboard.vue'
-onMounted(() => {
+
+onMounted(async () => {
   // Get user data from localStorage (set during login)
   const storedUser = localStorage.getItem('user')
   if (storedUser) {
     user.value = JSON.parse(storedUser)
+    // Validate session with backend
+    await validateSession()
   } else {
     // Redirect to login if no user data
+    isCheckingSession.value = false
     router.push('/login')
   }
 })
@@ -41,28 +77,66 @@ onMounted(() => {
 
 <template>
   <div class="dashboard">
-    <nav class="dashboard-nav">
-      <div class="nav-content">
-        <h2>Welcome, {{ user.first_name }} {{ user.last_name }}</h2>
-        <div class="nav-actions">
-          <span class="user-role">({{ user.role }})</span>
-          <button @click="logout" class="logout-btn">Log Out</button>
-        </div>
-      </div>
-    </nav>
+    <!-- Loading state while checking session -->
+    <div v-if="isCheckingSession" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>Verifying session...</p>
+    </div>
 
-    <main class="dashboard-main">
-      <!-- Role-based component rendering -->
-      <AdminDashboard v-if="user.role === 'admin'" />
-      <TeacherDashboard v-else-if="user.role === 'teacher'" />
-      <StudentDashboard v-else-if="user.role === 'student'" />
-      <ParentDashboard v-else-if="user.role === 'parent'" />
-      <div v-else>Unknown role</div>
-    </main>
+    <!-- Dashboard content (only shown if session is valid) -->
+    <div v-else-if="isSessionValid" class="dashboard-content">
+      <nav class="dashboard-nav">
+        <div class="nav-content">
+          <h2>Welcome, {{ user.first_name }} {{ user.last_name }}</h2>
+          <div class="nav-actions">
+            <span class="user-role">({{ user.role }})</span>
+            <button @click="logout" class="logout-btn">Log Out</button>
+          </div>
+        </div>
+      </nav>
+
+      <main class="dashboard-main">
+        <!-- Role-based component rendering -->
+        <AdminDashboard v-if="user.role === 'admin'" />
+        <TeacherDashboard v-else-if="user.role === 'teacher'" />
+        <StudentDashboard v-else-if="user.role === 'student'" />
+        <ParentDashboard v-else-if="user.role === 'parent'" />
+        <div v-else>Unknown role</div>
+      </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #38aad9 0%, #42993c 100%);
+  color: white;
+}
+
+.loading-spinner {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 4px solid white;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 .dashboard-nav {
   background: #fff9d8;
   border-bottom: 2px solid #f2d422;
@@ -139,7 +213,6 @@ onMounted(() => {
 }
 
 .dashboard-content {
-  text-align: center;
-  color: #666;
+  height: 100%;
 }
 </style>

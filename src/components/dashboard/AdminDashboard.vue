@@ -37,6 +37,18 @@ const showConnectionModal = ref(false)
 const connectionType = ref<'teacher-student' | 'parent-student'>('teacher-student')
 const targetUserId = ref<number | null>(null)
 
+// Miro board management state
+const showMiroModal = ref(false)
+const selectedStudentForMiro = ref<any>(null)
+const studentMiroBoards = ref<any[]>([])
+const isLoadingMiroBoards = ref(false)
+const miroBoardForm = ref({
+  board_name: '',
+  board_url: '',
+})
+const miroBoardMessage = ref('')
+const isSavingMiroBoard = ref(false)
+
 // Toggle user details expansion
 const toggleUserDetails = (userId: number) => {
   expandedUserId.value = expandedUserId.value === userId ? null : userId
@@ -58,25 +70,31 @@ const createConnection = async () => {
   }
 
   try {
-    // Determine user IDs based on connection type
+    // Determine user IDs based on connection type and who initiated
     let user1Id, user2Id
-    
+
     if (connectionType.value === 'teacher-student') {
-      // For teacher-student: selected user is teacher, target is student
-      if (selectedUserForConnection.value.role !== 'teacher') {
-        alert('For teacher-student connections, the first user must be a teacher')
-        return
+      // Teacher-student connection
+      if (selectedUserForConnection.value.role === 'teacher') {
+        // Teacher initiated: teacher is user1, student is user2
+        user1Id = selectedUserForConnection.value.id
+        user2Id = targetUserId.value
+      } else if (selectedUserForConnection.value.role === 'student') {
+        // Student initiated: teacher is user1, student is user2
+        user1Id = targetUserId.value // target is the teacher
+        user2Id = selectedUserForConnection.value.id // selected is the student
       }
-      user1Id = selectedUserForConnection.value.id
-      user2Id = targetUserId.value
-    } else {
-      // For parent-student: selected user is parent, target is student
-      if (selectedUserForConnection.value.role !== 'parent') {
-        alert('For parent-student connections, the first user must be a parent')
-        return
+    } else if (connectionType.value === 'parent-student') {
+      // Parent-student connection
+      if (selectedUserForConnection.value.role === 'parent') {
+        // Parent initiated: parent is user1, student is user2
+        user1Id = selectedUserForConnection.value.id
+        user2Id = targetUserId.value
+      } else if (selectedUserForConnection.value.role === 'student') {
+        // Student initiated: parent is user1, student is user2
+        user1Id = targetUserId.value // target is the parent
+        user2Id = selectedUserForConnection.value.id // selected is the student
       }
-      user1Id = selectedUserForConnection.value.id
-      user2Id = targetUserId.value
     }
 
     const connectionData = {
@@ -84,12 +102,12 @@ const createConnection = async () => {
       user2_id: user2Id,
       connection_type: connectionType.value,
       created_by: selectedUserForConnection.value.id, // Admin creates it
-      skip_verification: true // Flag to bypass normal verification
+      skip_verification: true, // Flag to bypass normal verification
     }
 
     console.log('Creating admin connection:', connectionData)
 
-    const response = await fetch('http://localhost:8080/api/admin/connections', {
+    const response = await fetch('http://localhost:8080/api/connections', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,21 +117,39 @@ const createConnection = async () => {
     })
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to create connection')
+      let errorMessage = 'Failed to create connection'
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData.error || errorMessage
+      } catch (e) {
+        // Response is not valid JSON, check status
+        errorMessage = `Server error (${response.status}): ${response.statusText}`
+      }
+      throw new Error(errorMessage)
     }
 
-    const result = await response.json()
+    let result
+    try {
+      result = await response.json()
+    } catch (e) {
+      console.error('Failed to parse response JSON:', e)
+      throw new Error('Invalid response from server')
+    }
     console.log('Connection created successfully:', result)
-    
-    alert(`Connection created successfully between ${selectedUserForConnection.value.first_name} and the selected user!`)
+
+    // Get the target user name for better feedback
+    const targetUser = allUsers.value.find((u) => u.id === targetUserId.value)
+    const targetUserName = targetUser ? `${targetUser.first_name} ${targetUser.last_name}` : 'selected user'
+
+    alert(
+      `Connection created successfully between ${selectedUserForConnection.value.first_name} and ${targetUserName}!`,
+    )
     showConnectionModal.value = false
     selectedUserForConnection.value = null
     targetUserId.value = null
-    
+
     // Refresh user data to show new connections
     fetchAllUsers()
-
   } catch (error) {
     console.error('Error creating connection:', error)
     alert(`Failed to create connection: ${error.message}`)
@@ -123,57 +159,71 @@ const createConnection = async () => {
 // Get users eligible for connection with the selected user
 const getEligibleUsers = computed(() => {
   if (!selectedUserForConnection.value) return []
-  
-  return allUsers.value.filter(user => {
+
+  return allUsers.value.filter((user) => {
     // Don't include the selected user themselves
     if (user.id === selectedUserForConnection.value.id) return false
-    
-    // Filter based on connection type
+
+    // Filter based on connection type and who initiated
     if (connectionType.value === 'teacher-student') {
-      // For teacher-student: selected user is teacher, need students
-      return user.role === 'student'
-    } else {
-      // For parent-student: selected user is parent, need students
-      return user.role === 'student'
+      // If selected user is teacher: need to find students
+      if (selectedUserForConnection.value.role === 'teacher') {
+        return user.role === 'student'
+      }
+      // If selected user is student: need to find teachers
+      if (selectedUserForConnection.value.role === 'student') {
+        return user.role === 'teacher'
+      }
+    } else if (connectionType.value === 'parent-student') {
+      // If selected user is parent: need to find students
+      if (selectedUserForConnection.value.role === 'parent') {
+        return user.role === 'student'
+      }
+      // If selected user is student: need to find parents
+      if (selectedUserForConnection.value.role === 'student') {
+        return user.role === 'parent'
+      }
     }
+    return false
   })
 })
 
 const filteredUsers = computed(() => {
   let filtered = [...allUsers.value]
-  
+
   // Apply search filter
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase().trim()
-    filtered = filtered.filter(user => 
-      user.first_name.toLowerCase().includes(query) ||
-      user.last_name.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query) ||
-      user.role.toLowerCase().includes(query) ||
-      (user.phone && user.phone.toLowerCase().includes(query))
+    filtered = filtered.filter(
+      (user) =>
+        user.first_name.toLowerCase().includes(query) ||
+        user.last_name.toLowerCase().includes(query) ||
+        user.email.toLowerCase().includes(query) ||
+        user.role.toLowerCase().includes(query) ||
+        (user.phone && user.phone.toLowerCase().includes(query)),
     )
   }
-  
+
   // Apply sorting
   filtered.sort((a, b) => {
     let aValue = a[sortField.value]
     let bValue = b[sortField.value]
-    
+
     // Handle undefined/null values
     if (!aValue) aValue = ''
     if (!bValue) bValue = ''
-    
+
     // Convert to string for comparison
     aValue = String(aValue).toLowerCase()
     bValue = String(bValue).toLowerCase()
-    
+
     if (sortDirection.value === 'asc') {
       return aValue.localeCompare(bValue)
     } else {
       return bValue.localeCompare(aValue)
     }
   })
-  
+
   return filtered
 })
 
@@ -1120,9 +1170,166 @@ const viewUserLessons = (user: any) => {
 }
 
 const deactivateUser = (user: any) => {
-  if (confirm(`Deactivate ${user.first_name} ${user.last_name}? This will prevent them from logging in.`)) {
+  if (
+    confirm(
+      `Deactivate ${user.first_name} ${user.last_name}? This will prevent them from logging in.`,
+    )
+  ) {
     alert(`User ${user.first_name} ${user.last_name} deactivated (Coming soon)`)
   }
+}
+
+// Miro Board Management Functions
+const openMiroBoardModal = async (user: any) => {
+  if (user.role !== 'student') {
+    alert('Miro boards can only be assigned to students')
+    return
+  }
+
+  selectedStudentForMiro.value = user
+  miroBoardForm.value = { board_name: '', board_url: '' }
+  miroBoardMessage.value = ''
+  showMiroModal.value = true
+
+  // Fetch existing boards for this student
+  await fetchStudentMiroBoards(user.id)
+}
+
+const fetchStudentMiroBoards = async (studentId: number) => {
+  isLoadingMiroBoards.value = true
+  try {
+    const response = await fetch(`http://localhost:8080/api/students/${studentId}/miro-boards`, {
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch Miro boards')
+    }
+
+    const data = await response.json()
+    studentMiroBoards.value = data.miroBoards || []
+  } catch (error) {
+    console.error('Error fetching Miro boards:', error)
+    studentMiroBoards.value = []
+    miroBoardMessage.value = 'Failed to load boards'
+  } finally {
+    isLoadingMiroBoards.value = false
+  }
+}
+
+const validateBoardUrl = (url: string): boolean => {
+  try {
+    const urlObj = new URL(url)
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const addMiroBoard = async () => {
+  if (!miroBoardForm.value.board_name.trim()) {
+    miroBoardMessage.value = 'Board name is required'
+    return
+  }
+
+  if (!miroBoardForm.value.board_url.trim()) {
+    miroBoardMessage.value = 'Board URL is required'
+    return
+  }
+
+  if (!validateBoardUrl(miroBoardForm.value.board_url)) {
+    miroBoardMessage.value = 'Invalid URL. Please enter a valid HTTP/HTTPS link'
+    return
+  }
+
+  if (miroBoardForm.value.board_name.length > 50) {
+    miroBoardMessage.value = 'Board name must be 50 characters or less'
+    return
+  }
+
+  isSavingMiroBoard.value = true
+  miroBoardMessage.value = ''
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/students/${selectedStudentForMiro.value.id}/miro-boards`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          board_name: miroBoardForm.value.board_name.trim(),
+          board_url: miroBoardForm.value.board_url.trim(),
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to add board')
+    }
+
+    const result = await response.json()
+    miroBoardForm.value = { board_name: '', board_url: '' }
+    miroBoardMessage.value = 'Board added successfully!'
+
+    // Refresh the boards list
+    await fetchStudentMiroBoards(selectedStudentForMiro.value.id)
+
+    // Clear message after 2 seconds
+    setTimeout(() => {
+      miroBoardMessage.value = ''
+    }, 2000)
+  } catch (error) {
+    console.error('Error adding Miro board:', error)
+    miroBoardMessage.value = `Error: ${error.message}`
+  } finally {
+    isSavingMiroBoard.value = false
+  }
+}
+
+const deleteMiroBoard = async (boardId: number) => {
+  if (!confirm('Are you sure you want to delete this board?')) {
+    return
+  }
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/students/${selectedStudentForMiro.value.id}/miro-boards/${boardId}`,
+      {
+        method: 'DELETE',
+        credentials: 'include',
+      },
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to delete board')
+    }
+
+    miroBoardMessage.value = 'Board deleted successfully'
+
+    // Refresh the boards list
+    await fetchStudentMiroBoards(selectedStudentForMiro.value.id)
+
+    // Clear message after 2 seconds
+    setTimeout(() => {
+      miroBoardMessage.value = ''
+    }, 2000)
+  } catch (error) {
+    console.error('Error deleting Miro board:', error)
+    miroBoardMessage.value = `Error: ${error.message}`
+  }
+}
+
+const closeMiroBoardModal = () => {
+  showMiroModal.value = false
+  selectedStudentForMiro.value = null
+  studentMiroBoards.value = []
+  miroBoardForm.value = { board_name: '', board_url: '' }
+  miroBoardMessage.value = ''
 }
 </script>
 
@@ -1353,78 +1560,193 @@ const deactivateUser = (user: any) => {
         </div>
       </div>
     </div>
-<!-- Connection Creation Modal -->
-<div v-if="showConnectionModal" class="modal-overlay" @click="showConnectionModal = false">
-  <div class="modal-content connection-modal" @click.stop>
-    <div class="modal-header">
-      <h2>Create Connection</h2>
-      <button class="close-btn" @click="showConnectionModal = false">×</button>
-    </div>
+    <!-- Connection Creation Modal -->
+    <div v-if="showConnectionModal" class="modal-overlay" @click="showConnectionModal = false">
+      <div class="modal-content connection-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Create Connection</h2>
+          <button class="close-btn" @click="showConnectionModal = false">×</button>
+        </div>
 
-    <div class="modal-body">
-      <div class="connection-info" v-if="selectedUserForConnection">
-        <div class="user-display">
-          <div class="user-avatar">
-            {{ selectedUserForConnection.first_name.charAt(0) }}{{ selectedUserForConnection.last_name.charAt(0) }}
+        <div class="modal-body">
+          <div class="connection-info" v-if="selectedUserForConnection">
+            <div class="user-display">
+              <div class="user-avatar">
+                {{ selectedUserForConnection.first_name.charAt(0)
+                }}{{ selectedUserForConnection.last_name.charAt(0) }}
+              </div>
+              <div class="user-details">
+                <h3>
+                  {{ selectedUserForConnection.first_name }}
+                  {{ selectedUserForConnection.last_name }}
+                </h3>
+                <div class="user-meta">
+                  <span class="role-badge" :class="`role-${selectedUserForConnection.role}`">
+                    {{ selectedUserForConnection.role }}
+                  </span>
+                  <span class="connection-type">→ {{ connectionType.replace('-', ' to ') }}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="user-details">
-            <h3>{{ selectedUserForConnection.first_name }} {{ selectedUserForConnection.last_name }}</h3>
-            <div class="user-meta">
-              <span class="role-badge" :class="`role-${selectedUserForConnection.role}`">
-                {{ selectedUserForConnection.role }}
-              </span>
-              <span class="connection-type">→ {{ connectionType.replace('-', ' to ') }}</span>
+
+          <div class="connection-form">
+            <div class="form-group">
+              <label
+                >Select {{ connectionType === 'teacher-student' ? 'Student' : 'Student' }} to
+                Connect:</label
+              >
+              <div class="users-selector">
+                <div
+                  v-for="targetUser in getEligibleUsers"
+                  :key="targetUser.id"
+                  class="user-option"
+                  :class="{ selected: targetUserId === targetUser.id }"
+                  @click="targetUserId = targetUser.id"
+                >
+                  <div class="option-avatar">
+                    {{ targetUser.first_name.charAt(0) }}{{ targetUser.last_name.charAt(0) }}
+                  </div>
+                  <div class="option-details">
+                    <div class="option-name">
+                      {{ targetUser.first_name }} {{ targetUser.last_name }}
+                    </div>
+                    <div class="option-email">{{ targetUser.email }}</div>
+                  </div>
+                  <div class="option-check" v-if="targetUserId === targetUser.id">✓</div>
+                </div>
+
+                <div v-if="getEligibleUsers.length === 0" class="no-users">
+                  No eligible users found for this connection type.
+                </div>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-cancel" @click="showConnectionModal = false">
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn-create"
+                @click="createConnection"
+                :disabled="!targetUserId"
+              >
+                Create Connection
+              </button>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="connection-form">
-        <div class="form-group">
-          <label>Select {{ connectionType === 'teacher-student' ? 'Student' : 'Student' }} to Connect:</label>
-          <div class="users-selector">
-            <div 
-              v-for="targetUser in getEligibleUsers" 
-              :key="targetUser.id"
-              class="user-option"
-              :class="{ 'selected': targetUserId === targetUser.id }"
-              @click="targetUserId = targetUser.id"
+    <!-- Miro Board Management Modal -->
+    <div v-if="showMiroModal" class="modal-overlay" @click="closeMiroBoardModal">
+      <div class="modal-content miro-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Manage Miro Boards</h2>
+          <button class="close-btn" @click="closeMiroBoardModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Student Info -->
+          <div class="miro-student-info" v-if="selectedStudentForMiro">
+            <div class="student-display">
+              <div class="student-avatar">
+                {{ selectedStudentForMiro.first_name.charAt(0)
+                }}{{ selectedStudentForMiro.last_name.charAt(0) }}
+              </div>
+              <div class="student-details">
+                <h3>
+                  {{ selectedStudentForMiro.first_name }} {{ selectedStudentForMiro.last_name }}
+                </h3>
+                <p class="student-email">{{ selectedStudentForMiro.email }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add Board Form -->
+          <div class="miro-form">
+            <h4>Add New Miro Board</h4>
+            <div class="form-group">
+              <label for="board-name">Board Name:</label>
+              <input
+                id="board-name"
+                v-model="miroBoardForm.board_name"
+                type="text"
+                placeholder="e.g., Project A Miro Board"
+                class="form-input"
+                maxlength="50"
+              />
+              <div class="input-hint">
+                Max 50 characters ({{ miroBoardForm.board_name.length }}/50)
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="board-url">Board URL:</label>
+              <input
+                id="board-url"
+                v-model="miroBoardForm.board_url"
+                type="text"
+                placeholder="https://miro.com/app/board/..."
+                class="form-input"
+              />
+              <div class="input-hint">Must start with https:// or http://</div>
+            </div>
+
+            <div
+              v-if="miroBoardMessage"
+              class="message"
+              :class="miroBoardMessage.includes('Error') ? 'error' : 'success'"
             >
-              <div class="option-avatar">
-                {{ targetUser.first_name.charAt(0) }}{{ targetUser.last_name.charAt(0) }}
-              </div>
-              <div class="option-details">
-                <div class="option-name">{{ targetUser.first_name }} {{ targetUser.last_name }}</div>
-                <div class="option-email">{{ targetUser.email }}</div>
-              </div>
-              <div class="option-check" v-if="targetUserId === targetUser.id">
-                ✓
-              </div>
+              {{ miroBoardMessage }}
             </div>
-            
-            <div v-if="getEligibleUsers.length === 0" class="no-users">
-              No eligible users found for this connection type.
+
+            <button @click="addMiroBoard" :disabled="isSavingMiroBoard" class="btn-add-board">
+              {{ isSavingMiroBoard ? 'Adding...' : '+ Add Board' }}
+            </button>
+          </div>
+
+          <!-- Existing Boards -->
+          <div class="miro-boards-list">
+            <h4>Existing Boards ({{ studentMiroBoards.length }})</h4>
+
+            <div v-if="isLoadingMiroBoards" class="loading-state">Loading boards...</div>
+
+            <div v-else-if="studentMiroBoards.length === 0" class="empty-state">
+              <p>No boards added yet. Create one above to get started!</p>
+            </div>
+
+            <div v-else class="boards-table">
+              <div v-for="board in studentMiroBoards" :key="board.id" class="board-item">
+                <div class="board-info">
+                  <div class="board-name">{{ board.board_name }}</div>
+                  <div class="board-url">
+                    <a :href="board.board_url" target="_blank" rel="noopener noreferrer">
+                      {{ board.board_url.substring(0, 50) }}...
+                    </a>
+                  </div>
+                </div>
+                <button
+                  @click="deleteMiroBoard(board.id)"
+                  class="btn-delete-board"
+                  title="Delete this board"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="form-actions">
-          <button type="button" class="btn-cancel" @click="showConnectionModal = false">
-            Cancel
-          </button>
-          <button 
-            type="button" 
-            class="btn-create" 
-            @click="createConnection"
-            :disabled="!targetUserId"
-          >
-            Create Connection
-          </button>
+          <!-- Modal Actions -->
+          <div class="modal-actions">
+            <button @click="closeMiroBoardModal" class="btn-close">Done</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
+
     <!-- Main Admin Cards View -->
     <div v-if="currentView === 'main'">
       <h1>Admin Panel</h1>
@@ -1444,259 +1766,281 @@ const deactivateUser = (user: any) => {
       </div>
     </div>
 
-  <!-- User Management View -->
-<div v-else-if="currentView === 'user-management'" class="section-view">
-  <div class="section-header">
-    <button @click="goBack" class="back-btn">← Back to Admin Panel</button>
-    <h1>User Management</h1>
-  </div>
-  <div class="section-content">
-    <div class="users-header">
-      <h2>All System Users</h2>
-      <p>Manage user connections and profiles</p>
-    </div>
-    
-    <!-- Search Bar -->
-    <div class="search-container">
-      <div class="search-box">
-        <span class="search-icon" >🔍</span>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search users by name, email, role, or phone..."
-          class="search-input"
-        />
-        <button 
-          v-if="searchQuery" 
-          @click="searchQuery = ''" 
-          class="clear-search"
-          title="Clear search"
-        >
-          ✕
-        </button>
+    <!-- User Management View -->
+    <div v-else-if="currentView === 'user-management'" class="section-view">
+      <div class="section-header">
+        <button @click="goBack" class="back-btn">← Back to Admin Panel</button>
+        <h1>User Management</h1>
       </div>
-      <div class="search-info" v-if="searchQuery">
-        Found {{ filteredUsers.length }} user{{ filteredUsers.length !== 1 ? 's' : '' }} matching "{{ searchQuery }}"
-      </div>
-    </div>
-    
-    <!-- Users Table -->
-<div class="users-table-container" v-if="filteredUsers.length > 0">
-  <table class="users-table">
-    <thead>
-      <tr>
-        <th @click="sortBy('first_name')" class="sortable-header">
-          <div class="header-content">
-            <span>Name</span>
-            <span class="sort-indicator">{{ getSortIndicator('first_name') }}</span>
-          </div>
-        </th>
-        <th @click="sortBy('email')" class="sortable-header">
-          <div class="header-content">
-            <span>Email</span>
-            <span class="sort-indicator">{{ getSortIndicator('email') }}</span>
-          </div>
-        </th>
-        <th @click="sortBy('role')" class="sortable-header">
-          <div class="header-content">
-            <span>Role</span>
-            <span class="sort-indicator">{{ getSortIndicator('role') }}</span>
-          </div>
-        </th>
-        <th @click="sortBy('phone')" class="sortable-header">
-          <div class="header-content">
-            <span>Phone</span>
-            <span class="sort-indicator">{{ getSortIndicator('phone') }}</span>
-          </div>
-        </th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      <template v-for="user in filteredUsers" :key="user.id">
-        <!-- User Row -->
-        <tr class="user-row">
-          <td class="user-name">
-            <strong>{{ user.first_name }} {{ user.last_name }}</strong>
-            <div class="user-id">ID: {{ user.id }}</div>
-          </td>
-          <td class="user-email">{{ user.email }}</td>
-          <td class="user-role">
-            <span :class="`role-badge role-${user.role}`">
-              {{ user.role }}
-            </span>
-          </td>
-          <td class="user-phone">{{ user.phone || 'N/A' }}</td>
-          <td class="user-actions">
-            <button 
-              @click="toggleUserDetails(user.id)" 
-              class="btn-manage"
-              :title="`${expandedUserId === user.id ? 'Hide' : 'Show'} details for ${user.first_name} ${user.last_name}`"
+      <div class="section-content">
+        <div class="users-header">
+          <h2>All System Users</h2>
+          <p>Manage user connections and profiles</p>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="search-container">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search users by name, email, role, or phone..."
+              class="search-input"
+            />
+            <button
+              v-if="searchQuery"
+              @click="searchQuery = ''"
+              class="clear-search"
+              title="Clear search"
             >
-              {{ expandedUserId === user.id ? 'Hide' : 'Manage' }}
+              ✕
             </button>
-          </td>
-        </tr>
+          </div>
+          <div class="search-info" v-if="searchQuery">
+            Found {{ filteredUsers.length }} user{{
+              filteredUsers.length !== 1 ? 's' : ''
+            }}
+            matching "{{ searchQuery }}"
+          </div>
+        </div>
 
-        <!-- Expanded Details Row (only show if this user is expanded) -->
-        <tr v-if="expandedUserId === user.id" class="user-details-row">
-          <td colspan="5" class="details-container">
-            <div class="user-details">
-              <div class="details-grid">
-                <!-- User Information -->
-                <div class="details-section">
-                  <h4>User Information</h4>
-                  <div class="info-grid">
-                    <div class="info-item">
-                      <span class="info-label">Full Name:</span>
-                      <span class="info-value">{{ user.first_name }} {{ user.last_name }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">Email:</span>
-                      <span class="info-value">{{ user.email }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">Phone:</span>
-                      <span class="info-value">{{ user.phone || 'Not provided' }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">Date of Birth:</span>
-                      <span class="info-value">{{ user.date_of_birth || 'Not provided' }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">Account Created:</span>
-                      <span class="info-value">{{ new Date(user.created_at).toLocaleDateString() }}</span>
-                    </div>
-                    <div class="info-item">
-                      <span class="info-label">User ID:</span>
-                      <span class="info-value code">{{ user.id }}</span>
-                    </div>
+        <!-- Users Table -->
+        <div class="users-table-container" v-if="filteredUsers.length > 0">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th @click="sortBy('first_name')" class="sortable-header">
+                  <div class="header-content">
+                    <span>Name</span>
+                    <span class="sort-indicator">{{ getSortIndicator('first_name') }}</span>
                   </div>
-                </div>
+                </th>
+                <th @click="sortBy('email')" class="sortable-header">
+                  <div class="header-content">
+                    <span>Email</span>
+                    <span class="sort-indicator">{{ getSortIndicator('email') }}</span>
+                  </div>
+                </th>
+                <th @click="sortBy('role')" class="sortable-header">
+                  <div class="header-content">
+                    <span>Role</span>
+                    <span class="sort-indicator">{{ getSortIndicator('role') }}</span>
+                  </div>
+                </th>
+                <th @click="sortBy('phone')" class="sortable-header">
+                  <div class="header-content">
+                    <span>Phone</span>
+                    <span class="sort-indicator">{{ getSortIndicator('phone') }}</span>
+                  </div>
+                </th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="user in filteredUsers" :key="user.id">
+                <!-- User Row -->
+                <tr class="user-row">
+                  <td class="user-name">
+                    <strong>{{ user.first_name }} {{ user.last_name }}</strong>
+                    <div class="user-id">ID: {{ user.id }}</div>
+                  </td>
+                  <td class="user-email">{{ user.email }}</td>
+                  <td class="user-role">
+                    <span :class="`role-badge role-${user.role}`">
+                      {{ user.role }}
+                    </span>
+                  </td>
+                  <td class="user-phone">{{ user.phone || 'N/A' }}</td>
+                  <td class="user-actions">
+                    <button
+                      @click="toggleUserDetails(user.id)"
+                      class="btn-manage"
+                      :title="`${expandedUserId === user.id ? 'Hide' : 'Show'} details for ${user.first_name} ${user.last_name}`"
+                    >
+                      {{ expandedUserId === user.id ? 'Hide' : 'Manage' }}
+                    </button>
+                  </td>
+                </tr>
 
-                <!-- Connection Management -->
-                <div class="details-section">
-                  <h4>Connection Management</h4>
-                  <div class="connection-actions">
-                    <div v-if="user.role === 'teacher'" class="action-group">
-                      <h5>Connect as Teacher</h5>
-                      <p class="action-description">
-                        Create teacher-student connection with a student
-                      </p>
-                      <button 
-                        @click="openConnectionModal(user, 'teacher-student')"
-                        class="btn-action"
-                      >
-                        📚 Connect to Student
-                      </button>
-                    </div>
-                    
-                    <div v-if="user.role === 'parent'" class="action-group">
-                      <h5>Connect as Parent</h5>
-                      <p class="action-description">
-                        Create parent-student connection with a student
-                      </p>
-                      <button 
-                        @click="openConnectionModal(user, 'parent-student')"
-                        class="btn-action"
-                      >
-                        👨‍👧 Connect to Student
-                      </button>
-                    </div>
-                    
-                    <div v-if="user.role === 'student'" class="action-group">
-                      <h5>Connect Student To</h5>
-                      <p class="action-description">
-                        This user is a student. Connect them to a teacher or parent from their manage view.
-                      </p>
-                      <div class="student-connections">
-                        <button class="btn-action disabled" disabled>
-                          👨‍🏫 Connect to Teacher
-                        </button>
-                        <button class="btn-action disabled" disabled>
-                          👨‍👧 Connect to Parent
-                        </button>
+                <!-- Expanded Details Row (only show if this user is expanded) -->
+                <tr v-if="expandedUserId === user.id" class="user-details-row">
+                  <td colspan="5" class="details-container">
+                    <div class="user-details">
+                      <div class="details-grid">
+                        <!-- User Information -->
+                        <div class="details-section">
+                          <h4>User Information</h4>
+                          <div class="info-grid">
+                            <div class="info-item">
+                              <span class="info-label">Full Name:</span>
+                              <span class="info-value"
+                                >{{ user.first_name }} {{ user.last_name }}</span
+                              >
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">Email:</span>
+                              <span class="info-value">{{ user.email }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">Phone:</span>
+                              <span class="info-value">{{ user.phone || 'Not provided' }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">Date of Birth:</span>
+                              <span class="info-value">{{
+                                user.date_of_birth || 'Not provided'
+                              }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">Account Created:</span>
+                              <span class="info-value">{{
+                                new Date(user.created_at).toLocaleDateString()
+                              }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">User ID:</span>
+                              <span class="info-value code">{{ user.id }}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Connection Management -->
+                        <div class="details-section">
+                          <h4>Connection Management</h4>
+                          <div class="connection-actions">
+                            <div v-if="user.role === 'teacher'" class="action-group">
+                              <h5>Connect as Teacher</h5>
+                              <p class="action-description">
+                                Create teacher-student connection with a student
+                              </p>
+                              <button
+                                @click="openConnectionModal(user, 'teacher-student')"
+                                class="btn-action"
+                              >
+                                📚 Connect to Student
+                              </button>
+                            </div>
+
+                            <div v-if="user.role === 'parent'" class="action-group">
+                              <h5>Connect as Parent</h5>
+                              <p class="action-description">
+                                Create parent-student connection with a student
+                              </p>
+                              <button
+                                @click="openConnectionModal(user, 'parent-student')"
+                                class="btn-action"
+                              >
+                                👨‍👧 Connect to Student
+                              </button>
+                            </div>
+
+                            <div v-if="user.role === 'student'" class="action-group">
+                              <h5>Connect Student To</h5>
+                              <p class="action-description">
+                                Connect this student to a teacher or parent.
+                              </p>
+                              <div class="student-connections">
+                                <button
+                                  @click="openConnectionModal(user, 'teacher-student')"
+                                  class="btn-action"
+                                >
+                                  👨‍🏫 Connect to Teacher
+                                </button>
+                                <button
+                                  @click="openConnectionModal(user, 'parent-student')"
+                                  class="btn-action"
+                                >
+                                  👨‍👧 Connect to Parent
+                                </button>
+                              </div>
+                            </div>
+
+                            <div v-if="user.role === 'admin'" class="action-group">
+                              <h5>Admin User</h5>
+                              <p class="action-description">
+                                Admin users don't participate in teacher-student/parent-student
+                                connections.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="details-section">
+                          <h4>Quick Actions</h4>
+                          <div class="quick-actions">
+                            <button class="btn-quick-action" @click="editUserProfile(user)">
+                              ✏️ Edit Profile
+                            </button>
+                            <button class="btn-quick-action" @click="resetUserPassword(user)">
+                              🔒 Reset Password
+                            </button>
+                            <button class="btn-quick-action" @click="viewUserLessons(user)">
+                              📅 View Lessons
+                            </button>
+                            <button
+                              v-if="user.role === 'student'"
+                              class="btn-quick-action btn-miro"
+                              @click="openMiroBoardModal(user)"
+                            >
+                              🎨 Manage Miro Boards
+                            </button>
+                            <button
+                              class="btn-quick-action btn-danger"
+                              @click="deactivateUser(user)"
+                            >
+                              ⚠️ Deactivate User
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    
-                    <div v-if="user.role === 'admin'" class="action-group">
-                      <h5>Admin User</h5>
-                      <p class="action-description">
-                        Admin users don't participate in teacher-student/parent-student connections.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
 
-                <!-- Quick Actions -->
-                <div class="details-section">
-                  <h4>Quick Actions</h4>
-                  <div class="quick-actions">
-                    <button class="btn-quick-action" @click="editUserProfile(user)">
-                      ✏️ Edit Profile
-                    </button>
-                    <button class="btn-quick-action" @click="resetUserPassword(user)">
-                      🔒 Reset Password
-                    </button>
-                    <button class="btn-quick-action" @click="viewUserLessons(user)">
-                      📅 View Lessons
-                    </button>
-                    <button class="btn-quick-action btn-danger" @click="deactivateUser(user)">
-                      ⚠️ Deactivate User
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </td>
-        </tr>
-      </template>
-    </tbody>
-  </table>
-</div>
-    
-    <!-- Empty State -->
-    <div v-else class="empty-state">
-      <div class="empty-icon">👥</div>
-      <h3>{{ searchQuery ? 'No Matching Users' : 'No Users Found' }}</h3>
-      <p v-if="searchQuery">
-        No users found matching "{{ searchQuery }}". Try a different search term.
-      </p>
-      <p v-else>There are no users registered in the system yet.</p>
-      <button 
-        v-if="searchQuery" 
-        @click="searchQuery = ''" 
-        class="btn-clear-search"
-      >
-        Clear Search
-      </button>
-    </div>
-    
-    <!-- Statistics -->
-    <div class="user-stats" v-if="allUsers.length > 0">
-      <div class="stat-card">
-        <div class="stat-number">{{ allUsers.length }}</div>
-        <div class="stat-label">Total Users</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">{{ allUsers.filter(u => u.role === 'student').length }}</div>
-        <div class="stat-label">Students</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">{{ allUsers.filter(u => u.role === 'teacher').length }}</div>
-        <div class="stat-label">Teachers</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">{{ allUsers.filter(u => u.role === 'parent').length }}</div>
-        <div class="stat-label">Parents</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">{{ allUsers.filter(u => u.role === 'admin').length }}</div>
-        <div class="stat-label">Admins</div>
+        <!-- Empty State -->
+        <div v-else class="empty-state">
+          <div class="empty-icon">👥</div>
+          <h3>{{ searchQuery ? 'No Matching Users' : 'No Users Found' }}</h3>
+          <p v-if="searchQuery">
+            No users found matching "{{ searchQuery }}". Try a different search term.
+          </p>
+          <p v-else>There are no users registered in the system yet.</p>
+          <button v-if="searchQuery" @click="searchQuery = ''" class="btn-clear-search">
+            Clear Search
+          </button>
+        </div>
+
+        <!-- Statistics -->
+        <div class="user-stats" v-if="allUsers.length > 0">
+          <div class="stat-card">
+            <div class="stat-number">{{ allUsers.length }}</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">{{ allUsers.filter((u) => u.role === 'student').length }}</div>
+            <div class="stat-label">Students</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">{{ allUsers.filter((u) => u.role === 'teacher').length }}</div>
+            <div class="stat-label">Teachers</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">{{ allUsers.filter((u) => u.role === 'parent').length }}</div>
+            <div class="stat-label">Parents</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">{{ allUsers.filter((u) => u.role === 'admin').length }}</div>
+            <div class="stat-label">Admins</div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
     <!-- Lessons View -->
     <div v-else-if="currentView === 'lessons'" class="section-view">
@@ -2682,25 +3026,25 @@ const deactivateUser = (user: any) => {
   .users-table-container {
     overflow-x: auto;
   }
-  
+
   .users-table {
     min-width: 700px;
   }
-  
+
   .search-input {
     font-size: 0.9rem;
     padding: 0.6rem 1rem 0.6rem 2.5rem;
   }
-  
+
   .search-icon {
     left: 0.8rem;
     font-size: 1rem;
   }
-  
+
   .user-stats {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
-  
+
   .stat-number {
     font-size: 1.5rem;
   }
@@ -2973,22 +3317,292 @@ const deactivateUser = (user: any) => {
   font-style: italic;
 }
 
+/* Miro Board Modal Styles */
+.miro-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.miro-student-info {
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #f2d422;
+  margin-bottom: 1.5rem;
+}
+
+.student-display {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.student-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff9a1f, #ffc107);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.student-details h3 {
+  margin: 0;
+  color: #2b2b2b;
+  font-size: 1.1rem;
+}
+
+.student-email {
+  margin: 0.3rem 0 0 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.miro-form {
+  background: #f9f9f9;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.miro-form h4 {
+  margin: 0 0 1rem 0;
+  color: #2b2b2b;
+  font-size: 1rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #333;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.3s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #ff9a1f;
+  box-shadow: 0 0 0 3px rgba(255, 154, 31, 0.1);
+}
+
+.input-hint {
+  font-size: 0.85rem;
+  color: #999;
+  margin-top: 0.3rem;
+}
+
+.message {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.message.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-left: 4px solid #2e7d32;
+}
+
+.message.error {
+  background: #ffebee;
+  color: #c62828;
+  border-left: 4px solid #c62828;
+}
+
+.btn-add-board {
+  width: 100%;
+  padding: 0.75rem;
+  background: #ff9a1f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-add-board:hover:not(:disabled) {
+  background: #ff8800;
+  transform: translateY(-2px);
+}
+
+.btn-add-board:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.miro-boards-list {
+  margin-bottom: 1.5rem;
+}
+
+.miro-boards-list h4 {
+  margin: 0 0 1rem 0;
+  color: #2b2b2b;
+  font-size: 1rem;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  background: #f9f9f9;
+  border-radius: 6px;
+  color: #666;
+}
+
+.boards-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.board-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.board-item:hover {
+  border-color: #ff9a1f;
+  box-shadow: 0 2px 8px rgba(255, 154, 31, 0.1);
+}
+
+.board-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.board-name {
+  font-weight: 600;
+  color: #2b2b2b;
+  margin-bottom: 0.3rem;
+}
+
+.board-url {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.board-url a {
+  color: #ff9a1f;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.board-url a:hover {
+  text-decoration: underline;
+}
+
+.btn-delete-board {
+  padding: 0.5rem 0.75rem;
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #c62828;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  margin-left: 1rem;
+}
+
+.btn-delete-board:hover {
+  background: #c62828;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ddd;
+}
+
+.btn-close {
+  padding: 0.75rem 1.5rem;
+  background: #2b2b2b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-close:hover {
+  background: #ff9a1f;
+  transform: translateY(-2px);
+}
+
+.btn-miro {
+  color: #000;
+}
+
+.btn-miro:hover {
+  background: #ffd500;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .details-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .info-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .student-connections {
     flex-direction: column;
   }
-  
+
   .quick-actions {
     grid-template-columns: 1fr;
+  }
+
+  .board-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btn-delete-board {
+    margin-left: 0;
+    margin-top: 0.5rem;
+    width: 100%;
   }
 }
 </style>

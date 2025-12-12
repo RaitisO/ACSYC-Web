@@ -30,3 +30,11 @@ export interface DropdownData {
   teachers: { id: number; first_name: string; last_name: string; email: string }[]
   subjects: { id: number; name: string }[]
 }
+
+export interface StudentMiroBoard {
+  id: number
+  student_id: number
+  board_name: string
+  board_url: string
+  created_at: string
+}
