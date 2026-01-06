@@ -37,6 +37,317 @@ const showConnectionModal = ref(false)
 const connectionType = ref<'teacher-student' | 'parent-student'>('teacher-student')
 const targetUserId = ref<number | null>(null)
 
+// Teacher colors for calendar
+const teacherColors = ref<Record<number, string>>({})
+
+// Generate default color for a teacher using golden angle algorithm
+const getDefaultTeacherColor = (teacherId: number): string => {
+  const hue = (teacherId * 137.5) % 360
+  const saturation = 70
+  const lightness = 50
+  
+  // Convert HSL to RGB then to hex
+  const c = ((100 - Math.abs(2 * lightness - 100)) / 100) * (saturation / 100)
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1))
+  const m = (lightness / 100) - (c / 2)
+  
+  let r = 0, g = 0, b = 0
+  if (hue >= 0 && hue < 60) { r = c; g = x; b = 0 }
+  else if (hue >= 60 && hue < 120) { r = x; g = c; b = 0 }
+  else if (hue >= 120 && hue < 180) { r = 0; g = c; b = x }
+  else if (hue >= 180 && hue < 240) { r = 0; g = x; b = c }
+  else if (hue >= 240 && hue < 300) { r = x; g = 0; b = c }
+  else { r = c; g = 0; b = x }
+  
+  const toHex = (n: number) => {
+    const hex = Math.round((n + m) * 255).toString(16)
+    return hex.length === 1 ? '0' + hex : hex
+  }
+  
+  return '#' + toHex(r) + toHex(g) + toHex(b)
+}
+
+// Get teacher color (custom or default)
+const getTeacherColor = (teacherId: number): string => {
+  return teacherColors.value[teacherId] || getDefaultTeacherColor(teacherId)
+}
+
+// Teacher color picker modal state
+const showColorPickerModal = ref(false)
+const selectedTeacherForColor = ref<any>(null)
+const colorPickerValue = ref('#38aad9')
+const colorPickerMessage = ref('')
+const isSavingColor = ref(false)
+
+// Open color picker modal for a teacher
+const openColorPickerModal = (teacher: any) => {
+  selectedTeacherForColor.value = teacher
+  colorPickerValue.value = teacherColors.value[teacher.id] || getDefaultTeacherColor(teacher.id)
+  colorPickerMessage.value = ''
+  showColorPickerModal.value = true
+}
+
+// Validate hex color format
+const isValidHexColor = (color: string): boolean => {
+  return /^#[0-9A-F]{6}$/i.test(color)
+}
+
+// Save teacher color
+const saveTeacherColor = async () => {
+  if (!selectedTeacherForColor.value) return
+
+  if (!isValidHexColor(colorPickerValue.value)) {
+    colorPickerMessage.value = 'Invalid color format. Please use #RRGGBB'
+    return
+  }
+
+  isSavingColor.value = true
+  colorPickerMessage.value = ''
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/teacher-colors/${selectedTeacherForColor.value.id}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ color_code: colorPickerValue.value }),
+      },
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to save color')
+    }
+
+    // Update local color map
+    teacherColors.value[selectedTeacherForColor.value.id] = colorPickerValue.value
+
+    colorPickerMessage.value = 'Color saved successfully!'
+
+    // Refresh calendar
+    const calendarApi = getCalendarApi()
+    if (calendarApi) {
+      const view = calendarApi.view
+      await fetchLessons(view.activeStart, view.activeEnd)
+    }
+
+    setTimeout(() => {
+      showColorPickerModal.value = false
+    }, 1500)
+  } catch (error) {
+    colorPickerMessage.value = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+  } finally {
+    isSavingColor.value = false
+  }
+}
+
+// Reset teacher color to default
+const resetTeacherColor = async () => {
+  if (!selectedTeacherForColor.value) return
+
+  isSavingColor.value = true
+  colorPickerMessage.value = ''
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/teacher-colors/${selectedTeacherForColor.value.id}`,
+      {
+        method: 'DELETE',
+        credentials: 'include',
+      },
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to reset color')
+    }
+
+    // Remove from local map (will use default)
+    delete teacherColors.value[selectedTeacherForColor.value.id]
+
+    colorPickerMessage.value = 'Color reset to default!'
+
+    // Refresh calendar
+    const calendarApi = getCalendarApi()
+    if (calendarApi) {
+      const view = calendarApi.view
+      await fetchLessons(view.activeStart, view.activeEnd)
+    }
+
+    setTimeout(() => {
+      showColorPickerModal.value = false
+    }, 1500)
+  } catch (error) {
+    colorPickerMessage.value = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+  } finally {
+    isSavingColor.value = false
+  }
+}
+
+// Close color picker modal
+const closeColorPickerModal = () => {
+  showColorPickerModal.value = false
+  selectedTeacherForColor.value = null
+  colorPickerValue.value = '#38aad9'
+  colorPickerMessage.value = ''
+}
+
+// Admin notes modal state
+const showNotesModal = ref(false)
+const selectedParentForNotes = ref<any>(null)
+const parentNote = ref('')
+const noteMessage = ref('')
+const isSavingNote = ref(false)
+const noteTimestamp = ref('')
+
+// Open notes modal for a parent
+const openNotesModal = async (parent: any) => {
+  selectedParentForNotes.value = parent
+  parentNote.value = ''
+  noteMessage.value = ''
+  noteTimestamp.value = ''
+  isSavingNote.value = false
+  showNotesModal.value = true
+
+  // Fetch existing note
+  await fetchParentNote(parent.id)
+}
+
+// Fetch admin's note about a parent
+const fetchParentNote = async (parentId: number) => {
+  try {
+    const response = await fetch(`http://localhost:8080/api/admin-notes/${parentId}`, {
+      credentials: 'include',
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      parentNote.value = data.note_content || ''
+      if (data.updated_at) {
+        const date = new Date(data.updated_at)
+        noteTimestamp.value = date.toLocaleDateString([], {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      }
+    } else if (response.status === 404) {
+      // No note exists yet, that's fine
+      parentNote.value = ''
+      noteTimestamp.value = ''
+    }
+  } catch (error) {
+    console.error('Error fetching note:', error)
+  }
+}
+
+// Save admin's note about a parent
+const saveParentNote = async () => {
+  if (!selectedParentForNotes.value) return
+
+  isSavingNote.value = true
+  noteMessage.value = ''
+
+  const payload = { note_content: parentNote.value }
+  console.log('Saving note for parent:', selectedParentForNotes.value.id, 'Payload:', payload)
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/admin-notes/${selectedParentForNotes.value.id}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      },
+    )
+
+    if (!response.ok) {
+      const text = await response.text()
+      console.error('Error response:', response.status, text)
+      try {
+        const errorData = JSON.parse(text)
+        throw new Error(errorData.error || 'Failed to save note')
+      } catch {
+        throw new Error(`HTTP ${response.status}: ${text}`)
+      }
+    }
+
+    const data = await response.json()
+    noteMessage.value = 'Note saved successfully!'
+
+    // Update timestamp
+    if (data.updated_at) {
+      const date = new Date(data.updated_at)
+      noteTimestamp.value = date.toLocaleDateString([], {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+
+    setTimeout(() => {
+      noteMessage.value = ''
+    }, 2000)
+  } catch (error) {
+    noteMessage.value = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    console.error('Save note error:', error)
+  } finally {
+    isSavingNote.value = false
+  }
+}
+
+// Delete admin's note about a parent
+const deleteParentNote = async () => {
+  if (!selectedParentForNotes.value) return
+
+  if (!confirm('Are you sure you want to delete this note?')) return
+
+  isSavingNote.value = true
+  noteMessage.value = ''
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/admin-notes/${selectedParentForNotes.value.id}`,
+      {
+        method: 'DELETE',
+        credentials: 'include',
+      },
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to delete note')
+    }
+
+    noteMessage.value = 'Note deleted successfully!'
+    parentNote.value = ''
+    noteTimestamp.value = ''
+
+    setTimeout(() => {
+      showNotesModal.value = false
+    }, 1500)
+  } catch (error) {
+    noteMessage.value = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+  } finally {
+    isSavingNote.value = false
+  }
+}
+
+// Close notes modal
+const closeNotesModal = () => {
+  showNotesModal.value = false
+  selectedParentForNotes.value = null
+  parentNote.value = ''
+  noteMessage.value = ''
+  noteTimestamp.value = ''
+}
+
 // Miro board management state
 const showMiroModal = ref(false)
 const selectedStudentForMiro = ref<any>(null)
@@ -139,7 +450,9 @@ const createConnection = async () => {
 
     // Get the target user name for better feedback
     const targetUser = allUsers.value.find((u) => u.id === targetUserId.value)
-    const targetUserName = targetUser ? `${targetUser.first_name} ${targetUser.last_name}` : 'selected user'
+    const targetUserName = targetUser
+      ? `${targetUser.first_name} ${targetUser.last_name}`
+      : 'selected user'
 
     alert(
       `Connection created successfully between ${selectedUserForConnection.value.first_name} and ${targetUserName}!`,
@@ -273,36 +586,65 @@ const fetchLessons = async (start: Date, end: Date) => {
 
     console.log(`Fetching lessons from ${startStr} to ${endStr}`)
 
-    const response = await fetch(
+    // Fetch lessons
+    const lessonsResponse = await fetch(
       `http://localhost:8080/api/lessons?start_date=${startStr}&end_date=${endStr}`,
       {
         credentials: 'include',
       },
     )
 
-    if (!response.ok) {
+    if (!lessonsResponse.ok) {
       throw new Error('Failed to fetch lessons')
     }
 
-    const data = await response.json()
-    console.log('Fetched lessons:', data.lessons)
+    const lessonsData = await lessonsResponse.json()
+    console.log('Fetched lessons:', lessonsData.lessons)
 
-    const events = data.lessons.map((lesson: any) => ({
-      id: lesson.id.toString(),
-      title: `${lesson.subject_name} - ${lesson.teacher_name}`,
-      start: lesson.start_time,
-      end: lesson.end_time,
-      extendedProps: {
-        teacherId: lesson.teacher_id,
-        studentId: lesson.student_id,
-        subjectId: lesson.subject_id,
-        studentName: lesson.student_name,
-        teacherName: lesson.teacher_name,
-        subjectName: lesson.subject_name,
-        status: lesson.status,
-        isRecurring: lesson.is_recurring,
-      },
-    }))
+    // Fetch teacher colors
+    try {
+      const colorsResponse = await fetch('http://localhost:8080/api/teacher-colors', {
+        credentials: 'include',
+      })
+
+      if (colorsResponse.ok) {
+        const colorsData = await colorsResponse.json()
+        // Populate teacherColors with custom colors from backend
+        if (colorsData.colors) {
+          Object.entries(colorsData.colors).forEach(([teacherId, color]) => {
+            if (color !== null) {
+              teacherColors.value[parseInt(teacherId)] = color as string
+            }
+          })
+        }
+        console.log('Teacher colors loaded:', teacherColors.value)
+      }
+    } catch (colorError) {
+      console.error('Error fetching teacher colors:', colorError)
+      // Continue without colors - will use defaults
+    }
+
+    const events = lessonsData.lessons.map((lesson: any) => {
+      const teacherColor = getTeacherColor(lesson.teacher_id)
+      return {
+        id: lesson.id.toString(),
+        title: `${lesson.subject_name} - ${lesson.teacher_name}\n${lesson.student_name}`,
+        start: lesson.start_time,
+        end: lesson.end_time,
+        backgroundColor: teacherColor,
+        borderColor: teacherColor,
+        extendedProps: {
+          teacherId: lesson.teacher_id,
+          studentId: lesson.student_id,
+          subjectId: lesson.subject_id,
+          studentName: lesson.student_name,
+          teacherName: lesson.teacher_name,
+          subjectName: lesson.subject_name,
+          status: lesson.status,
+          isRecurring: lesson.is_recurring,
+        },
+      }
+    })
 
     calendarEvents.value = events
     const calendarApi = getCalendarApi()
@@ -384,6 +726,12 @@ const calendarOptions = ref({
     daysOfWeek: [1, 2, 3, 4, 5, 6, 0],
     startTime: '08:00',
     endTime: '24:00',
+  },
+  eventContent: (arg: any) => {
+    // Split title by newline and create HTML with line breaks
+    const lines = arg.event.title.split('\n')
+    const titleHtml = lines.join('<br>')
+    return { html: titleHtml }
   },
 })
 
@@ -860,14 +1208,17 @@ const confirmEventMove = async (applyToAll: boolean = false) => {
     )
     console.log('Local times were:', movedEventInfo.value.newStart, movedEventInfo.value.newEnd)
 
-    const response = await fetch(`http://localhost:8080/api/lessons/${movedEventInfo.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `http://localhost:8080/api/lessons/${movedEventInfo.value.id}?apply_to_all=${applyToAll}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(lessonData),
       },
-      credentials: 'include',
-      body: JSON.stringify(lessonData),
-    })
+    )
 
     if (!response.ok) {
       const errorData = await response.json()
@@ -1640,6 +1991,170 @@ const closeMiroBoardModal = () => {
       </div>
     </div>
 
+    <!-- Teacher Color Picker Modal -->
+    <div v-if="showColorPickerModal" class="modal-overlay" @click="closeColorPickerModal">
+      <div class="modal-content color-picker-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Set Teacher Color</h2>
+          <button class="close-btn" @click="closeColorPickerModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div v-if="selectedTeacherForColor" class="color-picker-content">
+            <!-- Teacher Info -->
+            <div class="teacher-display">
+              <h3>{{ selectedTeacherForColor.first_name }} {{ selectedTeacherForColor.last_name }}</h3>
+              <p>{{ selectedTeacherForColor.email }}</p>
+            </div>
+
+            <!-- Color Preview -->
+            <div class="color-preview-section">
+              <div class="color-preview" :style="{ backgroundColor: colorPickerValue }"></div>
+            </div>
+
+            <!-- Color Input Options -->
+            <div class="color-input-section">
+              <!-- HTML Color Picker -->
+              <div class="form-group">
+                <label for="color-picker">Pick a color:</label>
+                <input
+                  id="color-picker"
+                  v-model="colorPickerValue"
+                  type="color"
+                  class="color-picker-input"
+                />
+              </div>
+
+              <!-- Hex Code Input -->
+              <div class="form-group">
+                <label for="hex-input">Or enter hex code:</label>
+                <input
+                  id="hex-input"
+                  v-model="colorPickerValue"
+                  type="text"
+                  placeholder="#38aad9"
+                  class="form-input hex-input"
+                  @input="colorPickerValue = colorPickerValue.toUpperCase()"
+                />
+                <small v-if="!isValidHexColor(colorPickerValue)" class="error-text">
+                  Invalid format. Use #RRGGBB (e.g., #38AAD9)
+                </small>
+              </div>
+            </div>
+
+            <!-- Message -->
+            <div
+              v-if="colorPickerMessage"
+              class="message"
+              :class="{ success: colorPickerMessage.includes('successfully') }"
+            >
+              {{ colorPickerMessage }}
+            </div>
+
+            <!-- Actions -->
+            <div class="color-picker-actions">
+              <button
+                type="button"
+                class="btn-cancel"
+                @click="closeColorPickerModal"
+                :disabled="isSavingColor"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn-reset"
+                @click="resetTeacherColor"
+                :disabled="isSavingColor"
+              >
+                Reset to Default
+              </button>
+              <button
+                type="button"
+                class="btn-save"
+                @click="saveTeacherColor"
+                :disabled="!isValidHexColor(colorPickerValue) || isSavingColor"
+              >
+                {{ isSavingColor ? 'Saving...' : 'Save Color' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Notes Modal -->
+    <div v-if="showNotesModal" class="modal-overlay" @click="closeNotesModal">
+      <div class="modal-content notes-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Parent Notes</h2>
+          <button class="close-btn" @click="closeNotesModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div v-if="selectedParentForNotes" class="notes-content">
+            <!-- Parent Info -->
+            <div class="parent-display">
+              <h3>{{ selectedParentForNotes.first_name }} {{ selectedParentForNotes.last_name }}</h3>
+              <p>{{ selectedParentForNotes.email }}</p>
+              <p v-if="noteTimestamp" class="note-timestamp">
+                Last updated: {{ noteTimestamp }}
+              </p>
+            </div>
+
+            <!-- Notes Textarea -->
+            <div class="form-group">
+              <label for="notes-textarea">Notes:</label>
+              <textarea
+                id="notes-textarea"
+                v-model="parentNote"
+                class="notes-textarea"
+                placeholder="Add your personal notes about this parent here..."
+              ></textarea>
+            </div>
+
+            <!-- Message -->
+            <div
+              v-if="noteMessage"
+              class="message"
+              :class="{ success: noteMessage.includes('successfully') }"
+            >
+              {{ noteMessage }}
+            </div>
+
+            <!-- Actions -->
+            <div class="notes-actions">
+              <button
+                type="button"
+                class="btn-cancel"
+                @click="closeNotesModal"
+                :disabled="isSavingNote"
+              >
+                Cancel
+              </button>
+              <button
+                v-if="parentNote"
+                type="button"
+                class="btn-danger"
+                @click="deleteParentNote"
+                :disabled="isSavingNote"
+              >
+                Delete Note
+              </button>
+              <button
+                type="button"
+                class="btn-save"
+                @click="saveParentNote"
+                :disabled="isSavingNote"
+              >
+                {{ isSavingNote ? 'Saving...' : 'Save Note' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Miro Board Management Modal -->
     <div v-if="showMiroModal" class="modal-overlay" @click="closeMiroBoardModal">
       <div class="modal-content miro-modal" @click.stop>
@@ -1978,6 +2493,23 @@ const closeMiroBoardModal = () => {
                             </button>
                             <button class="btn-quick-action" @click="viewUserLessons(user)">
                               📅 View Lessons
+                            </button>
+                            <button
+                              v-if="user.role === 'teacher'"
+                              class="btn-quick-action"
+                              @click="openColorPickerModal(user)"
+                              :style="{ backgroundColor: getTeacherColor(user.id) }"
+                              title="Set teacher color"
+                            >
+                              🎨 Set Color
+                            </button>
+                            <button
+                              v-if="user.role === 'parent'"
+                              class="btn-quick-action"
+                              @click="openNotesModal(user)"
+                              title="Add/edit personal notes"
+                            >
+                              📝 Notes
                             </button>
                             <button
                               v-if="user.role === 'student'"
@@ -3315,6 +3847,257 @@ const closeMiroBoardModal = () => {
   text-align: center;
   color: #666;
   font-style: italic;
+}
+
+/* Color Picker Modal Styles */
+.color-picker-modal {
+  max-width: 450px;
+}
+
+.color-picker-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.teacher-display {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #6c0f5f;
+  text-align: center;
+}
+
+.teacher-display h3 {
+  margin: 0 0 0.5rem 0;
+  color: #6c0f5f;
+}
+
+.teacher-display p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.color-preview-section {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.color-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  border: 3px solid #e0e0e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.color-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.color-picker-input {
+  width: 100%;
+  height: 50px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.hex-input {
+  font-family: monospace;
+  font-size: 1rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.error-text {
+  color: #dc3545;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.color-picker-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.btn-reset {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.btn-reset:hover:not(:disabled) {
+  background: #5a6268;
+  transform: translateY(-2px);
+}
+
+.btn-reset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.message {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: center;
+  background: #ffebee;
+}
+
+/* Notes Modal Styles */
+.notes-modal {
+  max-width: 550px;
+}
+
+.notes-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.parent-display {
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f2f5 100%);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border-left: 4px solid #6c0f5f;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.parent-display h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.parent-display p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #6c757d;
+}
+
+.notes-textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 0.95rem;
+  resize: vertical;
+  transition: border-color 0.3s ease;
+}
+
+.notes-textarea:focus {
+  outline: none;
+  border-color: #6c0f5f;
+  box-shadow: 0 0 0 3px rgba(108, 15, 95, 0.1);
+}
+
+.notes-textarea::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.note-timestamp {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin: 0.25rem 0 0 0;
+  font-style: italic;
+}
+
+.notes-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.notes-actions button {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.notes-actions .btn-cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.notes-actions .btn-cancel:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.notes-actions .btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.notes-actions .btn-danger {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.notes-actions .btn-danger:hover:not(:disabled) {
+  background: #fecaca;
+  border-color: #f87171;
+}
+
+.notes-actions .btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.notes-actions .btn-save {
+  background: #6c0f5f;
+  color: white;
+}
+
+.notes-actions .btn-save:hover:not(:disabled) {
+  background: #55094b;
+  box-shadow: 0 4px 12px rgba(108, 15, 95, 0.3);
+}
+
+.notes-actions .btn-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.message.success {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.message.error {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
 }
 
 /* Miro Board Modal Styles */
