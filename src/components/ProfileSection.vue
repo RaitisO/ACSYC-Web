@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import apiService from '@/services/api'
 
 // Reactive data
 const profile = ref({
@@ -27,13 +28,7 @@ const passwordForm = ref({
 const fetchProfile = async () => {
   isLoading.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/profile', {
-      credentials: 'include',
-    })
-
-    if (!response.ok) throw new Error('Failed to fetch profile')
-
-    const data = await response.json()
+    const data = await apiService.get('/profile')
     profile.value = data.profile
   } catch (error) {
     console.error('Error fetching profile:', error)
@@ -52,17 +47,11 @@ const updateProfile = async () => {
 
   isLoading.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/profile', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        first_name: profile.value.first_name,
-        last_name: profile.value.last_name,
-        phone: profile.value.phone,
-        date_of_birth: profile.value.date_of_birth,
+    await apiService.put('/profile', {
+      first_name: profile.value.first_name,
+      last_name: profile.value.last_name,
+      phone: profile.value.phone,
+      date_of_birth: profile.value.date_of_birth,
       }),
     })
 

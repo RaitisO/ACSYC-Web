@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import NavigationBar from './components/NavigationBar.vue'
 import { useRoute } from 'vue-router'
+import apiService from '@/services/api'
 import '@/styles/base.css'
 import '@/styles/components.css'
 import '@/styles/dashboard.css'
@@ -11,9 +12,8 @@ import { onMounted } from 'vue'
 
 const checkBackend = async () => {
   try {
-    const response = await fetch('http://localhost:8080/api/health')
-    const data = await response.json()
-    console.log('Backend response:', data)
+    const response = await apiService.get('/health')
+    console.log('Backend response:', response)
   } catch (error) {
     console.error('Backend connection failed:', error)
   }

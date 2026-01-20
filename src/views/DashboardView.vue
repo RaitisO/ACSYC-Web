@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import apiService from '@/services/api'
 
 const router = useRouter()
 const user = ref({
@@ -14,10 +15,7 @@ const isCheckingSession = ref(true)
 
 const logout = async () => {
   try {
-    await fetch('http://localhost:8080/api/logout', {
-      method: 'POST',
-      credentials: 'include',
-    })
+    await apiService.post('/logout', {})
 
     localStorage.removeItem('user')
     router.push('/')
@@ -32,15 +30,7 @@ const logout = async () => {
 const validateSession = async () => {
   isCheckingSession.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/profile', {
-      method: 'GET',
-      credentials: 'include',
-    })
-
-    if (!response.ok) {
-      // Session is invalid (server doesn't recognize the session)
-      throw new Error('Session invalid')
-    }
+    await apiService.get('/profile')
 
     // Session is valid
     isSessionValid.value = true
