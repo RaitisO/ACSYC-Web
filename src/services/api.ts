@@ -10,8 +10,9 @@ class ApiService {
   private baseURL: string
   private csrfToken: string | null = null
 
-  constructor(baseURL = 'http://localhost:8080/api') {
-    this.baseURL = baseURL
+  constructor(baseURL?: string) {
+    // Use environment variable if available, otherwise fallback to localhost
+    this.baseURL = baseURL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
     this.initCSRFToken()
   }
 
