@@ -92,9 +92,12 @@ export function useFormValidation() {
    */
   const resetForm = () => {
     for (const fieldName in fields.value) {
-      fields.value[fieldName].error = ''
-      fields.value[fieldName].touched = false
-      fields.value[fieldName].value = ''
+      const field = fields.value[fieldName]
+      if (field) {
+        field.error = ''
+        field.touched = false
+        field.value = ''
+      }
     }
   }
 
@@ -104,7 +107,10 @@ export function useFormValidation() {
   const getFormData = () => {
     const data: Record<string, any> = {}
     for (const fieldName in fields.value) {
-      data[fieldName] = fields.value[fieldName].value
+      const field = fields.value[fieldName]
+      if (field) {
+        data[fieldName] = field.value
+      }
     }
     return data
   }
