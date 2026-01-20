@@ -1,44 +1,68 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useFormValidation, ValidationRules } from '@/composables/useFormValidation'
+import apiService from '@/services/api'
 
 const router = useRouter()
 const email = ref('')
 const password = ref('')
+const errorMessage = ref('')
+const isLoading = ref(false)
+
+// Form validation
+const { registerField, validateField, validateForm, setFieldValue } = useFormValidation()
+
 onMounted(() => {
   // Check if user is already logged in
   const user = localStorage.getItem('user')
   if (user) {
     router.push('/dashboard')
   }
+
+  // Register validation fields
+  registerField('email', '', [
+    ValidationRules.required('Email'),
+    ValidationRules.email,
+  ])
+  registerField('password', '', [ValidationRules.required('Password')])
 })
+
 const handleLogin = async () => {
+  errorMessage.value = ''
+
+  // Update field values with actual input values before validation
+  setFieldValue('email', email.value)
+  setFieldValue('password', password.value)
+
+  // Validate email field
+  if (!validateField('email')) {
+    errorMessage.value = 'Please enter a valid email address'
+    return
+  }
+
+  // Validate password field
+  if (!validateField('password')) {
+    errorMessage.value = 'Password is required'
+    return
+  }
+
+  isLoading.value = true
+
   try {
-    const response = await fetch('http://localhost:8080/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value,
-      }),
+    const data = await apiService.post('/login', {
+      email: email.value,
+      password: password.value,
     })
 
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Login failed')
-    }
-
     console.log('Login successful:', data)
-    // Store user data (we'll add proper session management later)
     localStorage.setItem('user', JSON.stringify(data.user))
     router.push('/dashboard')
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error)
-    alert(error.message)
+    errorMessage.value = error.message || 'Login failed. Please try again.'
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -57,10 +81,23 @@ const goToRegister = () => {
 
     <div class="login-card">
       <h1>Welcome Back</h1>
+
+      <!-- Error Message -->
+      <div v-if="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
           <label for="email">Email</label>
-          <input type="email" id="email" v-model="email" placeholder="Enter your email" required />
+          <input
+            type="email"
+            id="email"
+            v-model="email"
+            placeholder="Enter your email"
+            @blur="validateField('email')"
+            required
+          />
         </div>
 
         <div class="form-group">
@@ -70,11 +107,14 @@ const goToRegister = () => {
             id="password"
             v-model="password"
             placeholder="Enter your password"
+            @blur="validateField('password')"
             required
           />
         </div>
 
-        <button type="submit" class="login-btn">Log In</button>
+        <button type="submit" class="login-btn" :disabled="isLoading">
+          {{ isLoading ? 'Logging in...' : 'Log In' }}
+        </button>
       </form>
 
       <div class="login-footer">
@@ -178,9 +218,23 @@ input:focus {
   margin-bottom: 1.5rem;
 }
 
-.login-btn:hover {
+.login-btn:hover:not(:disabled) {
   background: #9bbf19;
   transform: translateY(-2px);
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid #fcc;
 }
 
 .login-footer {

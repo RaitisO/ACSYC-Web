@@ -1299,6 +1299,8 @@ onMounted(() => {
   border-radius: 15px;
   padding: 2rem;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  display: flex;
+
 }
 
 .section-header {
@@ -1436,7 +1438,7 @@ onMounted(() => {
 
 /* Calendar Styles */
 .calendar-container {
-  height: 600px;
+  height: 70vh;
   background: white;
   border-radius: 10px;
   overflow: hidden;

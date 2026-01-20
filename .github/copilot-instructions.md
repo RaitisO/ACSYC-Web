@@ -1,145 +1,217 @@
-# ACSYC-Web Copilot Instructions
+# ACSYC Copilot Instructions
 
-## Project Architecture Overview
+## System Architecture
 
-**Tech Stack**: Vue 3 (Composition API) + TypeScript + Vite + Pinia + Vue Router
+**ACSYC** is a full-stack educational platform: Vue 3 TypeScript frontend (`ACSYC-Web/`, port 5173) + Go/Gin backend (`ACSYC-server/`, port 8080), SQLite database. Four user roles: Admin, Teacher, Student, Parent.
 
-**Core Purpose**: Multi-role educational platform managing users (Admin, Teacher, Student, Parent), lessons scheduling, and connections between users.
+### Critical Data Flows
 
-### Key Architecture Decisions
+1. **Auth Flow**: Register/Login → session cookie stored on backend → `localStorage.user` (frontend) → Dashboard reads role → role-based component renders. Session validated on dashboard mount via `/api/profile` GET.
 
-1. **Role-Based Dashboard Pattern**: Single dashboard view (`DashboardView.vue`) conditionally renders role-specific components via `v-if="user.role === 'admin'"` etc. See `src/views/DashboardView.vue` for pattern. User data stored in localStorage from login response.
+2. **Lesson Management**: Create lesson in Admin/Teacher dashboard → POST `/api/lessons` → backend writes to SQLite → FullCalendar refetch → calendar re-renders with teacher color (golden angle HSL hue algorithm).
 
-2. **Backend Integration**: All API calls use `fetch('http://localhost:8080/api/*')`. Key endpoints: `/api/health` (App.vue), `/api/profile`, `/api/logout`. Backend runs on `localhost:8080`.
+3. **User Connections**: Initiator requests → `/api/connect` → creates pending record → receiver confirms → updates status. Admins can force-connect via `/api/admin/users/:id/connect` without approval.
 
-3. **State Management**: Pinia stores for global state (see `src/stores/counter.ts` template). Currently minimal usage - most component state is local refs in `<script setup>`.
+## Frontend: Vue 3 + TypeScript + Vite
 
-4. **Component Structure**: 
-   - Page views in `src/views/` (layout containers)
-   - Reusable components in `src/components/` (TomSelect for dropdowns, ProfileSection, NavigationBar)
-   - Dashboard-specific role components in `src/components/dashboard/` (AdminDashboard, TeacherDashboard, StudentDashboard, ParentDashboard)
-
-## Critical Developer Workflows
-
-### Build & Run Commands
-- `npm run dev` - Hot-reload development server (Vite)
-- `npm run build` - Production build + type-check
-- `npm run type-check` - Run vue-tsc for TypeScript validation
-- `npm run lint` - ESLint with auto-fix
-- `npm run test:unit` - Run Vitest tests
-- `npm run test:e2e:dev` - Run Cypress against dev server (recommended for testing)
-
-### Testing Setup
-- **Unit Tests**: Vitest (`src/**/__tests__/*.spec.ts`), jsdom environment
-- **E2E Tests**: Cypress (`cypress/e2e/`, `cypress/support/`)
-- Test commands run build + type-check first (`npm run build` does this via `run-p`)
-
-### Debug Points
-- Vue DevTools required for development (install in your browser)
-- Backend health check runs on App mount to `http://localhost:8080/api/health`
-- localStorage contains user data after login - critical for role detection
-
-## Project-Specific Patterns & Conventions
-
-### 1. API Response Handling
-Standardized fetch pattern with error handling:
-```typescript
-const fetchData = async () => {
-  try {
-    const response = await fetch('http://localhost:8080/api/endpoint', {
-      credentials: 'include',  // Include for session-based auth
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    })
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Request failed')
-    }
-    return await response.json()
-  } catch (error) {
-    console.error('Error:', error)
-  }
-}
+### Setup & Commands
+```bash
+npm install                 # Node ^20.19.0 || >=22.12.0
+npm run dev                 # Vite hot-reload, localhost:5173
+npm run build               # Type-check + production bundle
+npm run type-check          # vue-tsc validation
+npm run test:unit           # Vitest + jsdom
+npm run test:e2e:dev        # Cypress against dev server
 ```
-**Key**: Check `response.ok` before parsing, extract error messages from response JSON.
 
-### 2. Component Data & Forms
-Use `ref()` for form state in `<script setup>`, `watch()` for reactivity, `onMounted()` for API calls:
+### Component Architecture
+- **Views** (`src/views/`): Page layouts (HomeView, LoginView, DashboardView, RegisterView)
+- **Dashboard** (`src/components/dashboard/`): Role-specific components:
+  - `AdminDashboard.vue` (3000+ lines): Lessons calendar, user management, connections, miro boards, admin notes
+  - `TeacherDashboard.vue`, `StudentDashboard.vue`, `ParentDashboard.vue`: Role-specific features
+- **Reusable** (`src/components/`): TomSelect (dropdown), ProfileSection, NavigationBar, ConnectionsSection
+
+### Key Patterns
+
+**API Calls with Session Auth**:
 ```typescript
-const formData = ref({ name: '', email: '' })
-const isLoading = ref(false)
-const message = ref('')
+const response = await fetch('http://localhost:8080/api/lessons', {
+  credentials: 'include',  // Sends session cookie (CRITICAL)
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data)
+})
+if (!response.ok) throw new Error((await response.json()).error)
+const data = await response.json()
+```
 
+**Form State & Submission**:
+```typescript
+const form = ref({ teacher: '', student: '', start: '', end: '' })
+const isLoading = ref(false)
 const submitForm = async () => {
   isLoading.value = true
-  // API call
-  message.value = 'Success' // User feedback
-  setTimeout(() => message.value = '', 3000) // Auto-clear
+  try {
+    await fetch('...', { credentials: 'include', body: JSON.stringify(form.value) })
+  } finally {
+    isLoading.value = false  // Always clear loading state
+  }
 }
-
-onMounted(() => {
-  // Fetch initial data
-})
+onMounted(() => { /* initial data fetch */ })
 ```
 
-### 3. Form Dropdowns
-Use `TomSelect.vue` component for styled multi-option selects:
-```vue
-<TomSelect 
-  id="unique-id" 
-  v-model="selectedValue"
-  :options="[{ value: '1', text: 'Option 1' }]" 
-  placeholder="Select..."
-/>
-```
-Custom wrapper around tom-select library with `update:modelValue` emission.
-
-### 4. Role-Based Component Rendering
-Conditional rendering by user role (set in localStorage during login):
+**Role-Based Component Rendering**:
 ```vue
 <AdminDashboard v-if="user.role === 'admin'" />
 <TeacherDashboard v-else-if="user.role === 'teacher'" />
-<!-- etc -->
+<StudentDashboard v-else-if="user.role === 'student'" />
+<ParentDashboard v-else-if="user.role === 'parent'" />
 ```
-User object structure: `{ first_name, last_name, email, role, id }`
+User object from localStorage: `{ id, first_name, last_name, email, role }`
 
-### 5. Calendar Integration
-FullCalendar v6 for Vue3 with dayGrid, timeGrid, interaction plugins. Reference: `AdminDashboard.vue` (2995 lines - complex example with lesson management, drag-drop, modal interactions).
+**Dropdown Component**:
+```vue
+<TomSelect id="teacher-select" v-model="lesson.teacher" 
+  :options="teachers.map(t => ({ value: t.id, text: t.first_name }))"
+  placeholder="Select teacher..." />
+```
 
-## TypeScript & Type Conventions
+### Calendar & Lessons
+- **Library**: FullCalendar v6 with dayGrid, timeGrid, interaction plugins
+- **Lesson Colors**: Teacher-specific via `(teacherId * 137.5) % 360` for unique HSL hue
+- **Implementation**: AdminDashboard.vue handles create, edit, delete, drag-drop
 
-- **Path alias**: `@/` maps to `src/` (tsconfig.json)
-- **Type definitions**: `src/types/` for domain models (e.g., `calendar.ts` has Lesson, TimeSlot, DropdownData interfaces)
-- Vue components use `<script setup lang="ts">` with explicit Props/Emits types
-- Global types auto-imported via `env.d.ts`
+## Backend: Go + Gin + SQLite
+
+### Setup & Run
+```bash
+cd ACSYC-server
+go run main.go              # Starts 0.0.0.0:8080
+# SQLite schema auto-created via database/schema.sql
+```
+
+### Architecture
+- **main.go** (1544 lines): Router, 30+ endpoint handlers, session middleware, CORS
+- **models/**: Data structures (User, Lesson, Connection, AdminNote, etc.)
+- **database/**: Repository pattern (UserRepository, LessonRepository, ConnectionRepository, etc.)
+- **tutoring.db**: SQLite file
+
+### API Endpoints (Session-Protected Routes)
+
+**Public**:
+- `POST /api/register` - User registration (validates role: student|parent|teacher|admin)
+- `POST /api/login` - Sets session cookie
+- `GET /api/health` - Connectivity check
+- `POST /api/logout` - Clears session
+
+**Protected** (requires `authMiddleware()` + valid session):
+- `GET /api/profile` - Current user info
+- `PUT /api/profile` - Update user profile
+- `PUT /api/change-password` - Change password
+
+**Lessons**:
+- `GET /api/lessons` - All user's lessons (role-filtered)
+- `POST /api/lessons` - Create lesson
+- `PUT /api/lessons/:id` - Update lesson
+- `DELETE /api/lessons/:id` - Delete lesson
+- `GET /api/dropdown-data` - Subjects, teachers, students (for forms)
+
+**Connections**:
+- `GET /api/connections` - User's confirmed connections
+- `GET /api/pending-connections` - Pending connection requests
+- `POST /api/connections` - Confirm/deny connection
+- `POST /api/connect` - Request connection with 4-char code
+- `GET /api/connection-code` - Generate new 4-char code
+
+**Admin Features**:
+- `POST /api/admin/users/:id/connect` - Admin force-connect users
+- `GET /api/users` - All users (admin only)
+- `GET /api/students/:studentId/miro-boards` - Collaborative boards
+- `POST /api/students/:studentId/miro-boards` - Add miro board
+- `DELETE /api/students/:studentId/miro-boards/:boardId` - Remove board
+- `GET/POST/DELETE /api/teacher-colors/:teacherId` - Teacher calendar colors
+- `GET/POST/DELETE /api/admin-notes/:parentId` - Admin notes on parents
+
+### Key Implementation Details
+
+**Session Middleware**:
+```go
+func authMiddleware() gin.HandlerFunc {
+  return func(c *gin.Context) {
+    session := sessions.Default(c)
+    if auth, ok := session.Get("authenticated").(bool); !ok || !auth {
+      c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+      c.Abort()
+      return
+    }
+    c.Next()
+  }
+}
+```
+
+**Repository Pattern**:
+```go
+type UserRepository struct{ db *sql.DB }
+func (r *UserRepository) GetUserByID(id int) (*User, error) {
+  query := `SELECT id, email, ... FROM users WHERE id = ?`
+  // Parameterized queries for SQL injection protection
+}
+```
+
+**CORS & Session Credentials**:
+- Allowed origins: `http://127.0.0.1:5173`, `http://localhost:5173`
+- Header: `Access-Control-Allow-Credentials: true` (required for cookies)
+- Frontend must send `credentials: 'include'` in fetch
+
+### Database Schema
+- **users**: id, email, password_hash, first_name, last_name, phone, date_of_birth, role
+- **lessons**: teacher_id, student_id, subject_id, start_time, end_time, is_recurring, status
+- **user_connections**: user1_id, user2_id, connection_type (teacher-student|parent-student), status
+- **connection_codes**: 4-char codes for self-serve linking (expires_at)
+- **student_miro_boards**: Collaborative board URLs per student
+- **teacher_colors**: Color assignments for lesson calendar
+- **admin_notes**: Admin observations on parents
+- **subjects**: List of subjects (referenced by lessons)
+
+## Development Workflow
+
+**Adding a Feature**:
+1. Backend: Create model struct → add repository method → add Gin route handler
+2. Frontend: Create API fetch call with session cookie → handle response in component
+3. Test integration: `npm run dev` (frontend) + `go run main.go` (backend)
+4. Validate: `npm run type-check` (no TS errors)
+
+**Debugging Tips**:
+- Backend: Log to console in terminal; check SQL queries in schema.sql for table structure
+- Frontend: Vue DevTools extension, browser Network tab (verify `credentials: include`, session cookie)
+- Session issues: DevTools → Application → Cookies → delete `acsyc-session` → reload → re-login
+
+**Common Issues**:
+- 401 Unauthorized: Session cookie missing or expired. Check `credentials: 'include'` in fetch, verify backend sets `Access-Control-Allow-Credentials: true`
+- 500 on API call: Backend error. Check terminal output for SQL/handler errors
+- Type mismatch: Run `npm run type-check` to catch TS errors before runtime
+
+## TypeScript & Files
+- **Path alias**: `@/` → `src/`
+- **env.d.ts**: Global type declarations
+- **src/types/calendar.ts**: Lesson, TimeSlot, DropdownData interfaces
+- **tsconfig.json**: Vue 3, DOM lib, bundler module resolution
 
 ## Key Files Reference
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `src/App.vue` | Root layout, backend health check, navbar conditional rendering |
-| `src/router/index.ts` | Route definitions (home, login, register, dashboard) with lazy loading |
-| `src/views/DashboardView.vue` | Dashboard wrapper, user auth check, role-based component dispatch |
-| `src/components/dashboard/*.vue` | Role-specific dashboards (each 500-3000 lines) |
-| `src/types/calendar.ts` | Lesson, TimeSlot, DropdownData interface definitions |
-| `src/components/TomSelect.vue` | Reusable dropdown component, lifecycle-managed |
-| `src/components/ProfileSection.vue` | User profile CRUD example (API + form pattern) |
-| `vite.config.ts` | Vite + Vue plugin config, ngrok host allowed |
+| `ACSYC-Web/src/views/DashboardView.vue` | Auth check, role-based component dispatch |
+| `ACSYC-Web/src/components/dashboard/AdminDashboard.vue` | Lesson calendar, user management, admin features |
+| `ACSYC-Web/src/components/TomSelect.vue` | Dropdown wrapper around tom-select library |
+| `ACSYC-Web/src/types/calendar.ts` | Domain type definitions |
+| `ACSYC-server/main.go` | All endpoints, middleware, request handlers |
+| `ACSYC-server/database/schema.sql` | SQLite schema with indexes |
+| `ACSYC-server/models/user.go` | User struct, password hashing (bcrypt) |
+| `ACSYC-server/database/user_repository.go` | User CRUD operations |
 
-## External Dependencies of Note
+## External Dependencies
 
-- **@fullcalendar/vue3** - Calendar rendering with multiple plugins
-- **tom-select** - Dropdown library (custom Vue wrapper in TomSelect.vue)
-- **pinia** - State management (minimal usage currently)
-- **cypress** - E2E testing
-- **vitest** - Unit testing
-- **eslint** with Vue/TS plugins - Linting
-
-## Git & CI Context
-
-Branch: `main` | Owner: RaitisO | Node requirements: `^20.19.0 || >=22.12.0`
-
----
-
-**When adding features**: Follow the component patterns in existing dashboards, use Pinia if managing complex shared state, always include type safety with TypeScript, and test API integrations against the actual backend at `localhost:8080`.
+**Frontend**: @fullcalendar/vue3, tom-select, pinia, vue-router, vitest, cypress, eslint  
+**Backend**: gin-gonic/gin (HTTP), gorilla/sessions (auth), mattn/go-sqlite3 (database)  
+**Both**: Go 1.24+, Node 20.19+ | 22.12+

@@ -45,25 +45,46 @@ const getDefaultTeacherColor = (teacherId: number): string => {
   const hue = (teacherId * 137.5) % 360
   const saturation = 70
   const lightness = 50
-  
+
   // Convert HSL to RGB then to hex
   const c = ((100 - Math.abs(2 * lightness - 100)) / 100) * (saturation / 100)
   const x = c * (1 - Math.abs(((hue / 60) % 2) - 1))
-  const m = (lightness / 100) - (c / 2)
-  
-  let r = 0, g = 0, b = 0
-  if (hue >= 0 && hue < 60) { r = c; g = x; b = 0 }
-  else if (hue >= 60 && hue < 120) { r = x; g = c; b = 0 }
-  else if (hue >= 120 && hue < 180) { r = 0; g = c; b = x }
-  else if (hue >= 180 && hue < 240) { r = 0; g = x; b = c }
-  else if (hue >= 240 && hue < 300) { r = x; g = 0; b = c }
-  else { r = c; g = 0; b = x }
-  
+  const m = lightness / 100 - c / 2
+
+  let r = 0,
+    g = 0,
+    b = 0
+  if (hue >= 0 && hue < 60) {
+    r = c
+    g = x
+    b = 0
+  } else if (hue >= 60 && hue < 120) {
+    r = x
+    g = c
+    b = 0
+  } else if (hue >= 120 && hue < 180) {
+    r = 0
+    g = c
+    b = x
+  } else if (hue >= 180 && hue < 240) {
+    r = 0
+    g = x
+    b = c
+  } else if (hue >= 240 && hue < 300) {
+    r = x
+    g = 0
+    b = c
+  } else {
+    r = c
+    g = 0
+    b = x
+  }
+
   const toHex = (n: number) => {
     const hex = Math.round((n + m) * 255).toString(16)
     return hex.length === 1 ? '0' + hex : hex
   }
-  
+
   return '#' + toHex(r) + toHex(g) + toHex(b)
 }
 
@@ -1578,11 +1599,9 @@ const validateBoardUrl = (url: string): boolean => {
 }
 
 const addMiroBoard = async () => {
-  if (!miroBoardForm.value.board_name.trim()) {
-    miroBoardMessage.value = 'Board name is required'
-    return
-  }
-
+  // Use "board" as default if nothing is typed
+  const boardName = miroBoardForm.value.board_name.trim() || 'board'
+  
   if (!miroBoardForm.value.board_url.trim()) {
     miroBoardMessage.value = 'Board URL is required'
     return
@@ -1593,7 +1612,7 @@ const addMiroBoard = async () => {
     return
   }
 
-  if (miroBoardForm.value.board_name.length > 50) {
+  if (boardName.length > 50) {
     miroBoardMessage.value = 'Board name must be 50 characters or less'
     return
   }
@@ -1611,7 +1630,7 @@ const addMiroBoard = async () => {
         },
         credentials: 'include',
         body: JSON.stringify({
-          board_name: miroBoardForm.value.board_name.trim(),
+          board_name: boardName,
           board_url: miroBoardForm.value.board_url.trim(),
         }),
       },
@@ -2003,7 +2022,9 @@ const closeMiroBoardModal = () => {
           <div v-if="selectedTeacherForColor" class="color-picker-content">
             <!-- Teacher Info -->
             <div class="teacher-display">
-              <h3>{{ selectedTeacherForColor.first_name }} {{ selectedTeacherForColor.last_name }}</h3>
+              <h3>
+                {{ selectedTeacherForColor.first_name }} {{ selectedTeacherForColor.last_name }}
+              </h3>
               <p>{{ selectedTeacherForColor.email }}</p>
             </div>
 
@@ -2095,11 +2116,11 @@ const closeMiroBoardModal = () => {
           <div v-if="selectedParentForNotes" class="notes-content">
             <!-- Parent Info -->
             <div class="parent-display">
-              <h3>{{ selectedParentForNotes.first_name }} {{ selectedParentForNotes.last_name }}</h3>
+              <h3>
+                {{ selectedParentForNotes.first_name }} {{ selectedParentForNotes.last_name }}
+              </h3>
               <p>{{ selectedParentForNotes.email }}</p>
-              <p v-if="noteTimestamp" class="note-timestamp">
-                Last updated: {{ noteTimestamp }}
-              </p>
+              <p v-if="noteTimestamp" class="note-timestamp">Last updated: {{ noteTimestamp }}</p>
             </div>
 
             <!-- Notes Textarea -->
@@ -2189,7 +2210,7 @@ const closeMiroBoardModal = () => {
                 id="board-name"
                 v-model="miroBoardForm.board_name"
                 type="text"
-                placeholder="e.g., Project A Miro Board"
+                placeholder="board"
                 class="form-input"
                 maxlength="50"
               />
