@@ -52,13 +52,7 @@ const updateProfile = async () => {
       last_name: profile.value.last_name,
       phone: profile.value.phone,
       date_of_birth: profile.value.date_of_birth,
-      }),
     })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to update profile')
-    }
 
     message.value = 'Profile updated successfully'
     isEditing.value = false
