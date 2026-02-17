@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import NavigationBar from './components/NavigationBar.vue'
+import NavigationBar from './components/common/NavigationBar.vue'
+import ErrorBoundary from './components/ErrorBoundary.vue'
 import { useRoute } from 'vue-router'
 import apiService from '@/services/api'
-import '@/styles/base.css'
-import '@/styles/components.css'
-import '@/styles/dashboard.css'
-import '@/styles/utilities.css'
+import '@/styles/index.css'
 
 const route = useRoute()
 import { onMounted } from 'vue'
@@ -26,13 +24,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <div id="app">
-    <!-- Show navbar on all pages -->
-    <NavigationBar v-if="route.path === '/'" />
+  <ErrorBoundary>
+    <div id="app">
+      <!-- Show navbar on all pages -->
+      <NavigationBar v-if="route.path === '/'" />
 
-    <!-- This is where different pages will render -->
-    <router-view />
-  </div>
+      <!-- This is where different pages will render -->
+      <router-view />
+    </div>
+  </ErrorBoundary>
 </template>
 
 <style>

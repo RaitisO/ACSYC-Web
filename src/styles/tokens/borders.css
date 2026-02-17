@@ -1,0 +1,22 @@
+/* =======================================================================
+   BORDER TOKEN SYSTEM
+   Defines border radius and border width values
+   ======================================================================= */
+
+:root {
+  /* ===== BORDER RADIUS ===== */
+  --radius-sm: 4px;           /* Small, subtle rounding */
+  --radius-md: 8px;           /* Standard rounding - default choice */
+  --radius-lg: 12px;          /* Large rounding - cards, containers */
+  --radius-xl: 16px;          /* Extra large rounding */
+  --radius-full: 9999px;      /* Fully rounded - pills, circles */
+
+  /* ===== BORDER WIDTH ===== */
+  --border-thin: 1px;         /* Subtle borders */
+  --border-normal: 2px;       /* Standard borders */
+  --border-thick: 3px;        /* Prominent borders */
+  --border-thick-xl: 4px;     /* Very prominent borders, accents */
+
+  /* ===== BORDER STYLES ===== */
+  --border-style: solid;
+}

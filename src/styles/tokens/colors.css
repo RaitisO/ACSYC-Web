@@ -1,0 +1,79 @@
+/* =======================================================================
+   COLOR TOKEN SYSTEM
+   Contains all color variables organized by purpose and contrast pairs
+   ======================================================================= */
+
+:root {
+  /* ===== ROLE-BASED COLORS (User Types) ===== */
+  --admin-primary: #6c0f5f;
+  --admin-secondary: #8a1a7a;
+  --student-primary: #ff9a1f;
+  --student-secondary: #e88a1a;
+  --teacher-primary: #38aad9;
+  --teacher-secondary: #2a8fc7;
+  --parent-primary: #9bbf19;
+  --parent-secondary: #87a916;
+
+  /* ===== TEXT COLORS FOR CONTRAST ===== */
+  /* Text on Light Yellow Background (#fff9d8) - MAIN APPLICATION BG */
+  --text-dark-on-light: #333333;           /* Primary text - dark gray */
+  --text-medium-on-light: #666666;         /* Secondary/muted text */
+  --text-light-on-light: #999999;          /* Disabled/hint text */
+
+  /* Text on Dark/Primary Colors (admin purple, teacher blue, etc.) */
+  --text-light-on-dark: #ffffff;           /* White text on dark colors */
+  --text-light-on-dark-secondary: #f0f0f0; /* Off-white for less emphasis */
+
+  /* Text on White Cards/Containers */
+  --text-dark-on-white: #333333;           /* Dark gray on white */
+  --text-medium-on-white: #666666;         /* Medium gray on white */
+
+  /* ===== STATUS COLORS WITH CONTRAST PAIRS ===== */
+  /* Success - Dark Green */
+  --success: #42993c;
+  --success-text: #1a4d00;                 /* Very dark green - high contrast */
+  --success-bg: #d4edda;                   /* Light green background */
+
+  /* Error - Dark Red */
+  --error: #dc3545;
+  --error-text: #8b0000;                   /* Dark red - high contrast */
+  --error-bg: #ffe5e5;                     /* Light red background */
+
+  /* Warning - Dark Orange */
+  --warning: #ffc107;
+  --warning-text: #8b4000;                 /* Dark orange - high contrast */
+  --warning-bg: #fff3e0;                   /* Light orange background */
+
+  /* Info - Dark Blue */
+  --info: #0dcaf0;
+  --info-text: #003d8f;                    /* Dark blue - high contrast */
+  --info-bg: #e3f2fd;                      /* Light blue background */
+
+  /* Neutral - Gray */
+  --gray: #6c757d;
+  --gray-hover: #5a6268;
+  --gray-text: #6c757d;
+  --gray-bg: #f8f9fa;
+
+  /* ===== BACKGROUND COLORS ===== */
+  --bg-primary: #fff9d8;                   /* Main application background (yellow) */
+  --bg-white: #ffffff;                     /* Cards, modals, light sections */
+  --bg-light: #f0f0f0;                     /* Secondary background */
+  --bg-lighter: #f9f9f9;                   /* Tertiary background */
+  --bg-dark: #333333;                      /* Dark sections */
+
+  /* ===== BORDER COLORS ===== */
+  --border-light: #e0e0e0;                 /* Light borders */
+  --border-medium: #cccccc;                /* Medium borders */
+  --border-dark: #6c757d;                  /* Dark borders */
+
+  /* ===== HOVER & INTERACTIVE STATES ===== */
+  --hover-light: rgba(0, 0, 0, 0.05);      /* Light hover overlay */
+  --hover-medium: rgba(0, 0, 0, 0.1);      /* Medium hover overlay */
+  --hover-dark: rgba(0, 0, 0, 0.2);        /* Dark hover overlay */
+
+  /* ===== DISABLED & INACTIVE ===== */
+  --disabled-text: #999999;
+  --disabled-bg: #f0f0f0;
+  --disabled-border: #e0e0e0;
+}

@@ -1,0 +1,42 @@
+/* =======================================================================
+   MAIN STYLESHEET - Entry Point for All Styles
+   Imports all token files and component styles in correct order
+   ======================================================================= */
+
+/* ===== TOKEN SYSTEM (Load First) ===== */
+/* Design tokens - colors, spacing, typography, shadows, borders */
+@import './tokens/colors.css';
+@import './tokens/spacing.css';
+@import './tokens/typography.css';
+@import './tokens/shadows.css';
+@import './tokens/borders.css';
+
+/* ===== BASE STYLES ===== */
+/* HTML resets and base element styles */
+@import './base.css';
+
+/* ===== COMPONENT STYLES ===== */
+/* Component-specific styles will be imported here */
+@import './components/sections.css';
+/* @import './components/forms.css'; */
+/* @import './components/modals.css'; */
+/* @import './components/cards.css'; */
+/* @import './components/navigation.css'; */
+/* @import './components/sections.css'; */
+/* @import './components/tables.css'; */
+
+/* ===== LAYOUT STYLES (To be added in Phase 2) ===== */
+/* Layout utilities and container styles */
+/* @import './layouts/containers.css'; */
+/* @import './layouts/grids.css'; */
+/* @import './layouts/flexbox.css'; */
+
+/* ===== VIEW STYLES (To be added in Phase 2) ===== */
+/* Page and view-specific styles */
+@import './views/auth.css';
+/* @import './views/dashboards.css'; */
+/* @import './views/admin.css'; */
+
+/* ===== UTILITY STYLES (To be added in Phase 4) ===== */
+/* Utility classes for spacing, display, etc. */
+/* @import './utilities.css'; */

@@ -1,0 +1,21 @@
+/* =======================================================================
+   SHADOW TOKEN SYSTEM
+   Defines shadow values for depth and elevation
+   ======================================================================= */
+
+:root {
+  /* ===== SHADOW DEPTH LEVELS ===== */
+  --shadow-sm: 0 4px 15px rgba(0, 0, 0, 0.2);    /* Small elements */
+  --shadow-md: 0 8px 25px rgba(0, 0, 0, 0.3);    /* Medium elements */
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.3);   /* Large elements */
+
+  /* ===== SEMANTIC SHADOWS ===== */
+  --shadow-button: 0 2px 4px rgba(0, 0, 0, 0.1);     /* Buttons, small interactions */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.1);       /* Card hover state */
+  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.3);    /* Modals, overlays */
+  --shadow-tooltip: 0 4px 12px rgba(0, 0, 0, 0.15);  /* Tooltips, popovers */
+
+  /* ===== INSET SHADOWS ===== */
+  --shadow-inset-sm: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-inset-md: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}

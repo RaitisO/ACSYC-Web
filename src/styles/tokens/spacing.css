@@ -1,0 +1,36 @@
+/* =======================================================================
+   SPACING TOKEN SYSTEM
+   Defines consistent spacing values for padding, margins, and gaps
+   ======================================================================= */
+
+:root {
+  /* ===== SPACING SCALE ===== */
+  /* Use these for padding, margins, and gaps */
+  --spacing-xs: 0.25rem;     /* 4px - minimal spacing */
+  --spacing-sm: 0.5rem;      /* 8px - small gaps/padding */
+  --spacing-md: 1rem;        /* 16px - standard padding/margins */
+  --spacing-lg: 1.5rem;      /* 24px - large sections */
+  --spacing-xl: 2rem;        /* 32px - extra large padding */
+  --spacing-xxl: 3rem;       /* 48px - very large sections */
+
+  /* ===== FLEX/GRID GAPS ===== */
+  /* Use these for gap property in flex/grid layouts */
+  --gap-xs: 0.25rem;
+  --gap-sm: 0.5rem;
+  --gap-md: 1rem;
+  --gap-lg: 1.5rem;
+  --gap-xl: 2rem;
+  --gap-xxl: 3rem;
+
+  /* ===== PADDING SHORTCUTS ===== */
+  /* Common padding combinations */
+  --padding-compact: 0.5rem;      /* For small, tight components */
+  --padding-normal: 1rem;         /* Default padding for most elements */
+  --padding-comfortable: 1.5rem;  /* For content-heavy components */
+  --padding-spacious: 2rem;       /* For large sections */
+
+  /* ===== MARGIN SHORTCUTS ===== */
+  --margin-section: 2rem;         /* Between major sections */
+  --margin-block: 1.5rem;         /* Between content blocks */
+  --margin-element: 1rem;         /* Between elements */
+}

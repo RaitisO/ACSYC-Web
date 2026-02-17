@@ -1,0 +1,37 @@
+/* =======================================================================
+   TYPOGRAPHY TOKEN SYSTEM
+   Defines font families, sizes, weights, and line heights
+   ======================================================================= */
+
+:root {
+  /* ===== FONT FAMILIES ===== */
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-family-heading: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-family-mono: 'Courier New', monospace;
+
+  /* ===== FONT SIZES ===== */
+  --font-xs: 0.75rem;        /* 12px - small labels, hints */
+  --font-sm: 0.875rem;       /* 14px - secondary text, labels */
+  --font-base: 1rem;         /* 16px - body text, default */
+  --font-lg: 1.125rem;       /* 18px - emphasis, larger text */
+  --font-xl: 1.5rem;         /* 24px - section headings */
+  --font-2xl: 2rem;          /* 32px - large headings, titles */
+  --font-3xl: 2.5rem;        /* 40px - page titles */
+
+  /* ===== FONT WEIGHTS ===== */
+  --font-normal: 400;      /* Regular weight */
+  --font-medium: 500;      /* Medium weight - emphasis */
+  --font-semibold: 600;    /* Semibold - headings */
+  --font-bold: 700;        /* Bold - strong emphasis */
+
+  /* ===== LINE HEIGHTS ===== */
+  --line-height-tight: 1.2;      /* Compact line spacing - headings */
+  --line-height-normal: 1.6;     /* Normal line spacing - body text */
+  --line-height-relaxed: 1.8;    /* Relaxed line spacing - readability */
+
+  /* ===== LETTER SPACING ===== */
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-normal: 0em;
+  --letter-spacing-wide: 0.02em;
+  --letter-spacing-wider: 0.05em;
+}

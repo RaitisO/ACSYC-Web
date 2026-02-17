@@ -1,0 +1,493 @@
+/* ============================================================
+ * Admin Views Styles
+ * Extracted from AdminApplicationsView.vue and TeacherRegisteredView.vue
+ * ============================================================ */
+
+/* ===== ADMIN APPLICATIONS VIEW ===== */
+
+.admin-applications-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #ff9a1f 0%, #bf1ba9 100%);
+  padding: 2rem;
+}
+
+.header {
+  max-width: 1200px;
+  margin: 0 auto 2rem;
+  color: white;
+}
+
+.header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2.5rem;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+.message {
+  max-width: 1200px;
+  margin: 0 auto 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.success-message {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.loading,
+.no-applications {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: white;
+  padding: 3rem;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.loading p,
+.no-applications p {
+  color: #666;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.applications-list {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.application-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.application-card:hover {
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+.application-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%);
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.student-info h2 {
+  color: #6c0f5f;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+}
+
+.submission-date {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.family-info {
+  color: #42993c;
+  font-size: 0.95rem;
+  margin: 0.5rem 0 0 0;
+  font-weight: 500;
+}
+
+.expand-btn {
+  background: #38aad9;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expand-btn:hover {
+  background: #2691b8;
+  transform: scale(1.05);
+}
+
+.expand-btn.expanded {
+  background: #2691b8;
+}
+
+.application-details {
+  padding: 2rem;
+  background: #fafafa;
+  border-top: 1px solid #eee;
+  animation: slideDown 0.3s ease;
+}
+
+.members-section {
+  margin-bottom: 2rem;
+}
+
+.members-section:last-child {
+  margin-bottom: 0;
+}
+
+.members-section h3 {
+  color: #6c0f5f;
+  font-size: 1.1rem;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #f2d422;
+}
+
+.member-card {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  border-left: 4px solid #38aad9;
+}
+
+.member-card:last-child {
+  margin-bottom: 0;
+}
+
+.member-header {
+  margin-bottom: 0.75rem;
+}
+
+.member-name {
+  font-weight: bold;
+  color: #6c0f5f;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.member-role {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.badge-student {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.badge-parent {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.badge-default {
+  background: #e0e0e0;
+  color: #424242;
+}
+
+.member-details {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.member-details p {
+  margin: 0.25rem 0;
+  line-height: 1.5;
+}
+
+.member-details strong {
+  color: #333;
+}
+
+.application-actions {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: #f9f9f9;
+  border-top: 1px solid #eee;
+  justify-content: flex-end;
+}
+
+.approve-btn,
+.reject-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.approve-btn {
+  background: #42993c;
+  color: white;
+}
+
+.approve-btn:hover:not(:disabled) {
+  background: #2d6b29;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(66, 153, 60, 0.3);
+}
+
+.reject-btn {
+  background: #ff6b6b;
+  color: white;
+}
+
+.reject-btn:hover:not(:disabled) {
+  background: #ff5252;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+}
+
+.approve-btn:disabled,
+.reject-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ===== TEACHER REGISTERED VIEW ===== */
+
+.success-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #42993c 0%, #38aad9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+}
+
+.success-container .back-home-btn {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid white;
+  padding: 0.5rem 1rem;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.success-container .back-home-btn:hover {
+  background: white;
+  color: #42993c;
+  transform: translateX(-5px);
+}
+
+.success-card {
+  background: #fff9d8;
+  padding: 3rem;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 600px;
+  text-align: center;
+}
+
+.success-icon {
+  font-size: 4rem;
+  color: #42993c;
+  margin-bottom: 1rem;
+}
+
+.success-card h1 {
+  color: #6c0f5f;
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+}
+
+.success-card .subtitle {
+  color: #42993c;
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+  font-weight: 500;
+}
+
+.details-section {
+  text-align: left;
+  margin-bottom: 2rem;
+}
+
+.info-box {
+  background: rgba(255, 255, 255, 0.7);
+  padding: 1.5rem;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+  border-left: 4px solid #38aad9;
+}
+
+.info-box:last-of-type {
+  border-left-color: #42993c;
+}
+
+.registered-email {
+  color: #333;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.info-box h2 {
+  color: #6c0f5f;
+  font-size: 1.1rem;
+  margin: 0 0 1rem 0;
+}
+
+.info-box ol {
+  color: #333;
+  margin: 0;
+  padding-left: 1.5rem;
+  line-height: 1.8;
+}
+
+.info-box ol li {
+  margin-bottom: 0.5rem;
+}
+
+.info-box p {
+  color: #333;
+  margin: 0;
+  line-height: 1.8;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.login-btn {
+  background: #42993c;
+  color: white;
+  padding: 1rem 2rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-btn:hover {
+  background: #2d6b29;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(66, 153, 60, 0.3);
+}
+
+.footer-note {
+  padding-top: 1.5rem;
+  border-top: 1px solid #f0f0f0;
+  color: #666;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.footer-note p {
+  margin: 0;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+
+@media (max-width: 768px) {
+  .admin-applications-container {
+    padding: 1rem;
+  }
+
+  .header h1 {
+    font-size: 1.75rem;
+  }
+
+  .application-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .expand-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .application-actions {
+    flex-direction: column;
+  }
+
+  .approve-btn,
+  .reject-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .application-details {
+    padding: 1.5rem;
+  }
+
+  .members-section h3 {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .success-card {
+    padding: 2rem;
+  }
+
+  .success-container .back-home-btn {
+    left: 1rem;
+    top: 1rem;
+  }
+
+  .success-card h1 {
+    font-size: 1.5rem;
+  }
+
+  .success-icon {
+    font-size: 3rem;
+  }
+}

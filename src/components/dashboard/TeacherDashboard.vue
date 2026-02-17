@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
+import { lessonService, connectionService, preferenceService } from '@/services'
+import { useAuth, useConnections, useModal, useModals } from '@/composables'
+import { useConnectionStore, useUiStore } from '@/stores'
+import '../../styles/views/dashboards.css'
 import FullCalendar from '@fullcalendar/vue3'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import ConnectionsSection from '@/components/ConnectionsSection.vue'
-import ProfileSection from '@/components/ProfileSection.vue'
+import ConnectionsSection from '@/components/sections/ConnectionsSection.vue'
+import ProfileSection from '@/components/sections/ProfileSection.vue'
 
 defineOptions({
   name: 'TeacherDashboard',
@@ -35,23 +39,32 @@ interface SelectedLesson {
   isOwned: boolean
 }
 
+// Composables & Stores
+const { getCurrentUserId } = useAuth()
+const connectionStore = useConnectionStore()
+const uiStore = useUiStore()
+
+// Computed: students from connection store
+const students = computed(() =>
+  connectionStore.connections.filter((c) => c.role === 'student'),
+)
+
+// Modal management (using uiStore)
+const modals = useModals({
+  editLesson: { autoClosureTime: 3000 },
+  createLesson: { autoClosureTime: 3000 },
+  moveConfirm: { autoClosureTime: 0 }, // No auto-close for confirmation
+})
+
+// View state
 const currentView = ref<'main' | 'students' | 'calendar' | 'subjects' | 'connections' | 'profile'>(
   'main',
 )
-const connectedStudents = ref<ConnectedStudent[]>([])
-const isLoading = ref(false)
+
 const subjects = ref<Array<{ id: number; name: string }>>([]) // Dynamic subjects from API
 
-// Calendar state
+//Calendar state
 const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null)
-const showEditModal = ref(false)
-const selectedLesson = ref<SelectedLesson | null>(null)
-const editMessage = ref('')
-const isUpdatingLesson = ref(false)
-const isDeletingLesson = ref(false)
-const showLessonModal = ref(false)
-const lessonMessage = ref('')
-const isCreatingLesson = ref(false)
 const selectedTimeSlot = ref({ start: '', end: '' })
 const newLesson = ref({
   teacher: '',
@@ -61,36 +74,12 @@ const newLesson = ref({
   end: '',
   isRecurring: false,
 })
-const showMoveConfirmModal = ref(false)
-const movedEventInfo = ref<{
-  id: string
-  title: string
-  oldStart: string
-  oldEnd: string
-  newStart: string
-  newEnd: string
-  isRecurring: boolean
-  teacherId: number
-  studentId: number
-  subjectId: number
-  status: string
-} | null>(null)
 const recurringOption = ref<'this' | 'all'>('this')
 
-// Get current user from localStorage
-const getCurrentUserId = (): number | null => {
-  const storedUser = localStorage.getItem('user')
-  if (!storedUser) return null
-  const user = JSON.parse(storedUser)
-  const userId = parseInt(user.id, 10)
-  console.log('Current user ID:', userId, 'Full user:', user, 'user.id type:', typeof user.id)
-  return userId
-}
-
 // Navigation functions
-const showStudents = () => {
+const showStudents = async () => {
   currentView.value = 'students'
-  fetchConnectedUsers()
+  await connectionStore.fetchConnections()
 }
 const showCalendar = () => {
   currentView.value = 'calendar'
@@ -100,27 +89,6 @@ const showSubjects = () => (currentView.value = 'subjects')
 const showConnections = () => (currentView.value = 'connections')
 const showProfile = () => (currentView.value = 'profile')
 const goBack = () => (currentView.value = 'main')
-
-// Fetch connected students
-const fetchConnectedUsers = async () => {
-  isLoading.value = true
-  try {
-    const response = await fetch('http://localhost:8080/api/connected-users', {
-      credentials: 'include',
-    })
-
-    if (!response.ok) throw new Error('Failed to fetch connected users')
-
-    const data = (await response.json()) as { connected_users: ConnectedStudent[] }
-    // Filter to only show students for teachers
-    connectedStudents.value = data.connected_users.filter((user) => user.role === 'student')
-  } catch (error) {
-    console.error('Error fetching connected users:', error)
-    connectedStudents.value = []
-  } finally {
-    isLoading.value = false
-  }
-}
 
 // Fetch dropdown data (subjects) from backend
 const fetchDropdownData = async () => {
@@ -180,7 +148,7 @@ const fetchTeacherCalendarLessons = async (start: Date, end: Date) => {
     // 2. Lessons for students connected to this teacher (can only view these)
     const teacherLessons = allLessons.filter((lesson) => {
       const isTeacherLesson = lesson.teacher_id === teacherId
-      const isStudentConnectedLesson = connectedStudents.value.some(
+      const isStudentConnectedLesson = students.value.some(
         (student) => student.id === lesson.student_id,
       )
       return isTeacherLesson || isStudentConnectedLesson
@@ -897,11 +865,11 @@ onMounted(() => {
       </div>
       <div class="section-content">
         <!-- Students content remains the same -->
-        <div v-if="isLoading" class="loading">
+        <div v-if="connectionStore.loading" class="loading">
           <p>Loading students...</p>
         </div>
 
-        <div v-else-if="connectedStudents.length === 0" class="no-students">
+        <div v-else-if="students.length === 0" class="no-students">
           <div class="empty-state">
             <h3>No Students Connected Yet</h3>
             <p>
@@ -913,9 +881,9 @@ onMounted(() => {
         </div>
 
         <div v-else class="students-list">
-          <h2>Connected Students ({{ connectedStudents.length }})</h2>
+          <h2>Connected Students ({{ students.length }})</h2>
           <div class="students-grid">
-            <div v-for="student in connectedStudents" :key="student.id" class="student-card">
+            <div v-for="student in students" :key="student.id" class="student-card">
               <div class="student-avatar">
                 {{ student.first_name.charAt(0) }}{{ student.last_name.charAt(0) }}
               </div>
@@ -976,7 +944,7 @@ onMounted(() => {
                   <select id="student" v-model="newLesson.student" class="form-select" required>
                     <option value="">Choose a connected student...</option>
                     <option
-                      v-for="student in connectedStudents"
+                      v-for="student in students"
                       :key="student.id"
                       :value="String(student.id)"
                     >
@@ -1064,7 +1032,7 @@ onMounted(() => {
                       {{ selectedLesson.studentName }}
                     </option>
                     <option
-                      v-for="student in connectedStudents"
+                      v-for="student in students"
                       :key="student.id"
                       :value="student.id"
                     >
@@ -1252,612 +1220,3 @@ onMounted(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.teacher-dashboard {
-  padding: 2rem;
-}
-
-.teacher-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin-top: 2rem;
-}
-
-.teacher-card {
-  background: #38aad9;
-  color: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-.teacher-card:hover {
-  background: #2a8fc7;
-  transform: translateY(-5px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-}
-
-.teacher-card h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1.3rem;
-}
-
-.teacher-card p {
-  margin: 0;
-  opacity: 0.9;
-}
-
-/* Section Views and other styles remain the same as before */
-.section-view {
-  background: #fff9d8;
-  border-radius: 15px;
-  padding: 2rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  display: flex;
-
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f0f0f0;
-}
-
-.back-btn {
-  background: #42993c;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 25px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.back-btn:hover {
-  background: #357c30;
-  transform: translateX(-3px);
-}
-
-.section-header h1 {
-  margin: 0;
-  color: #6c0f5f;
-}
-
-.section-content {
-  color: #333;
-  line-height: 1.6;
-}
-
-/* Students List Styles */
-.loading {
-  text-align: center;
-  padding: 2rem;
-  color: #6c757d;
-}
-
-.no-students {
-  text-align: center;
-  padding: 2rem;
-}
-
-.empty-state {
-  background: white;
-  padding: 3rem 2rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.empty-state h3 {
-  color: #6c0f5f;
-  margin-bottom: 1rem;
-}
-
-.empty-state p {
-  color: #6c757d;
-  margin-bottom: 2rem;
-}
-
-.btn-primary {
-  background: #38aad9;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.3s ease;
-}
-
-.btn-primary:hover {
-  background: #2a8fc7;
-  transform: translateY(-2px);
-}
-
-.students-list h2 {
-  color: #6c0f5f;
-  margin-bottom: 1.5rem;
-}
-
-.students-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-.student-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  border-left: 4px solid #38aad9;
-}
-
-.student-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: #38aad9;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 1.2rem;
-}
-
-.student-info h3 {
-  margin: 0 0 0.5rem 0;
-  color: #6c0f5f;
-}
-
-.student-email {
-  color: #6c757d;
-  margin: 0 0 0.5rem 0;
-  font-size: 0.9rem;
-}
-
-.connection-date {
-  color: #6c757d;
-  margin: 0;
-  font-size: 0.8rem;
-}
-
-/* Calendar Styles */
-.calendar-container {
-  height: 70vh;
-  background: white;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid #e0e0e0;
-}
-
-.calendar-legend {
-  display: flex;
-  gap: 2rem;
-  margin-top: 1rem;
-  padding: 1rem;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.legend-color {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 15px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 2px solid #f0f0f0;
-  background: #38aad9;
-  color: white;
-  border-radius: 15px 15px 0 0;
-}
-
-.modal-header h2 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 2rem;
-  cursor: pointer;
-  padding: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.3s ease;
-}
-
-.close-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.modal-body {
-  padding: 1.5rem;
-}
-
-.time-selection {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.time-input-group {
-  flex: 1;
-}
-
-.time-input {
-  min-width: 0;
-  font-size: 0.9rem;
-  padding: 0.6rem;
-}
-
-.form-input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.3s ease;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #38aad9;
-}
-
-.lesson-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form-group label {
-  font-weight: bold;
-  color: #38aad9;
-}
-
-.form-select {
-  width: 100%;
-  min-height: 46px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 1rem;
-  padding: 0.75rem;
-  transition: border-color 0.3s ease;
-}
-
-.form-select:focus {
-  outline: none;
-  border-color: #38aad9;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-weight: normal;
-  margin: 0;
-}
-
-.checkbox-input {
-  display: none;
-}
-
-.checkmark {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #e0e0e0;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-}
-
-.checkbox-input:checked + .checkmark {
-  background: #38aad9;
-  border-color: #38aad9;
-}
-
-.checkbox-input:checked + .checkmark::after {
-  content: '✓';
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
-}
-
-.message {
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.message.error {
-  background: #ffebee;
-  color: #c62828;
-  border-left: 4px solid #c62828;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 1rem;
-}
-
-.btn-cancel {
-  background: #6c757d;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.3s ease;
-}
-
-.btn-cancel:hover {
-  background: #5a6268;
-  transform: translateY(-2px);
-}
-
-.btn-create {
-  background: #42993c;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: all 0.3s ease;
-}
-
-.btn-create:hover:not(:disabled) {
-  background: #357c30;
-  transform: translateY(-2px);
-}
-
-.btn-create:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Move modal specific styles */
-.move-info {
-  text-align: center;
-}
-
-.info-section h3 {
-  margin: 0 0 1rem 0;
-  color: #38aad9;
-  font-size: 1.2rem;
-}
-
-.time-change {
-  background: #f8f9fa;
-  padding: 1rem;
-  border-radius: 8px;
-  margin: 1rem 0;
-  border-left: 4px solid #38aad9;
-}
-
-.time-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.time-row:last-child {
-  margin-bottom: 0;
-}
-
-.time-label {
-  font-weight: bold;
-  color: #6c757d;
-}
-
-.time-value {
-  color: #333;
-}
-
-.new-time {
-  color: #42993c;
-  font-weight: bold;
-}
-
-.recurring-options {
-  margin: 1.5rem 0;
-  padding: 1rem;
-  background: #fff3cd;
-  border-radius: 8px;
-  border-left: 4px solid #ffc107;
-}
-
-.recurring-options h4 {
-  margin: 0 0 1rem 0;
-  color: #856404;
-}
-
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-weight: normal;
-  margin: 0;
-}
-
-.radio-label input[type='radio'] {
-  display: none;
-}
-
-.radio-checkmark {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #6c757d;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-}
-
-.radio-label input[type='radio']:checked + .radio-checkmark {
-  border-color: #42993c;
-  background: #42993c;
-}
-
-.radio-label input[type='radio']:checked + .radio-checkmark::after {
-  content: '';
-  width: 8px;
-  height: 8px;
-  background: white;
-  border-radius: 50%;
-}
-
-.move-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-top: 1.5rem;
-}
-
-.move-actions .btn-cancel,
-.move-actions .btn-save {
-  min-width: 120px;
-}
-</style>
-
-<style>
-/* FullCalendar custom styling */
-:deep(.fc) {
-  height: 100%;
-}
-
-:deep(.fc-header-toolbar) {
-  padding: 1rem;
-  margin-bottom: 0 !important;
-}
-
-:deep(.fc-toolbar-title) {
-  color: #38aad9;
-  font-weight: bold;
-  font-size: 1.5rem;
-}
-
-:deep(.fc-button) {
-  background: #38aad9 !important;
-  border: none !important;
-}
-
-:deep(.fc-button:hover) {
-  background: #2a8fc7 !important;
-}
-
-:deep(.fc-button-active) {
-  background: #2a8fc7 !important;
-}
-
-:deep(.fc-event) {
-  background: #38aad9;
-  border: none;
-  border-radius: 4px;
-  border-left: 4px solid #2a8fc7;
-  padding: 2px 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-:deep(.fc-event:hover) {
-  background: #2a8fc7;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-:deep(.fc-event-title) {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-:deep(.fc-highlight) {
-  background: rgba(56, 170, 217, 0.2) !important;
-}
-
-:deep(.fc-non-business) {
-  background-color: rgba(0, 0, 0, 0.03) !important;
-}
-</style>
