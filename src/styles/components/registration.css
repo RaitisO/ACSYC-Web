@@ -1,0 +1,646 @@
+/**
+ * Registration Form Components Styles
+ *
+ * Reusable styles for FormInput, FormSelect, FormCheckbox,
+ * ProgressBar, TokenValidator, and ConfirmationModal components
+ */
+
+/* ===== FORM INPUT COMPONENT ===== */
+.form-input-group {
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.required-asterisk {
+  color: #e74c3c;
+  font-weight: 700;
+}
+
+.form-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  background-color: #fff;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #38aad9;
+  box-shadow: 0 0 0 3px rgba(56, 170, 217, 0.1);
+}
+
+.form-input:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.form-input--error {
+  border-color: #e74c3c;
+  background-color: #fff5f5;
+}
+
+.form-input--error:focus {
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+  border-color: #e74c3c;
+}
+
+.form-error {
+  margin-top: 0.375rem;
+  font-size: 0.85rem;
+  color: #e74c3c;
+  margin-bottom: 0;
+}
+
+.form-hint {
+  margin-top: 0.375rem;
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0;
+}
+
+/* ===== FORM SELECT COMPONENT ===== */
+.form-select-group {
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-select {
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23333' d='M1 0l4 6 4-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 2.5rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #38aad9;
+  box-shadow: 0 0 0 3px rgba(56, 170, 217, 0.1);
+}
+
+.form-select:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.form-select--error {
+  border-color: #e74c3c;
+  background-color: #fff5f5;
+}
+
+.form-select--error:focus {
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+  border-color: #e74c3c;
+}
+
+/* ===== FORM CHECKBOX COMPONENT ===== */
+.form-checkbox-group {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.form-checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.125rem;
+  cursor: pointer;
+  accent-color: #38aad9;
+  transition: all 0.3s ease;
+}
+
+.form-checkbox:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 170, 217, 0.1);
+}
+
+.form-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.form-checkbox--error {
+  accent-color: #e74c3c;
+}
+
+.checkbox-label {
+  font-size: 0.95rem;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+/* ===== PROGRESS BAR COMPONENT ===== */
+.progress-container {
+  margin-bottom: 2rem;
+}
+
+.progress-bar-wrapper {
+  position: relative;
+  padding-top: 2rem;
+  padding-bottom: 1rem;
+}
+
+.progress-steps-labels {
+  position: relative;
+  height: 2rem;
+  margin-bottom: 1rem;
+}
+
+.progress-step-label {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #999;
+  white-space: nowrap;
+  transition: color 0.3s ease;
+}
+
+.progress-step-label--completed {
+  color: #9bbf19;
+}
+
+.progress-step-label--active {
+  color: #38aad9;
+  font-weight: 600;
+}
+
+.progress-bar-background {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: visible;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38aad9, #9bbf19);
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-steps-circles {
+  position: absolute;
+  top: 5.2rem;
+  left: 0;
+  width: 100%;
+  height: 0;
+}
+
+.step-circle {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: white;
+  border: 2px solid #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #999;
+  transform: translate(-50%, -50%);
+  transition: all 0.3s ease;
+  font-size: 0.85rem;
+}
+
+.step-circle--completed {
+  background-color: #9bbf19;
+  border-color: #9bbf19;
+  color: white;
+}
+
+.step-circle--active {
+  background-color: #38aad9;
+  border-color: #38aad9;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(56, 170, 217, 0.2);
+}
+
+.step-checkmark {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* ===== TOKEN VALIDATOR COMPONENT ===== */
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e0e0e0;
+  border-top-color: #38aad9;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.validating-state,
+.valid-state,
+.invalid-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.validating-state p {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.checkmark {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #9bbf19;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.valid-state p {
+  color: #27ae60;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.error-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #e74c3c;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.error-message {
+  color: #e74c3c;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.error-hint {
+  color: #999;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+/* ===== CONFIRMATION MODAL COMPONENT ===== */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-title {
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.modal-message {
+  margin: 0 0 2rem 0;
+  color: #666;
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex: 1;
+}
+
+.modal-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-btn--primary {
+  background-color: #38aad9;
+  color: white;
+}
+
+.modal-btn--primary:hover:not(:disabled) {
+  background-color: #2a8ab8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(56, 170, 217, 0.3);
+}
+
+.modal-btn--secondary {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.modal-btn--secondary:hover:not(:disabled) {
+  background-color: #e0e0e0;
+}
+
+.modal-btn--danger {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.modal-btn--danger:hover:not(:disabled) {
+  background-color: #c0392b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+@media (max-width: 600px) {
+  .modal-content {
+    padding: 1.5rem;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-btn {
+    width: 100%;
+  }
+}
+
+/* ===== REGISTRATION STEP 6: SUBJECTS & AVAILABILITY ===== */
+
+.section-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.subjects-section,
+.availability-section,
+.lessons-section {
+  margin-bottom: 2.5rem;
+}
+
+.step-description {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 1.5rem;
+  line-height: 1.4;
+}
+
+/* ===== SUBJECTS GRID ===== */
+.subjects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.subject-btn {
+  padding: 0.75rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  background-color: #fff;
+  color: #333;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.subject-btn:hover {
+  border-color: #38aad9;
+  background-color: #f0f8ff;
+}
+
+.subject-btn--selected {
+  background-color: #38aad9;
+  color: white;
+  border-color: #38aad9;
+  box-shadow: 0 2px 8px rgba(56, 170, 217, 0.3);
+}
+
+/* ===== TIME GRID ===== */
+.availability-hint {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
+.time-grid {
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.time-grid-header {
+  display: grid;
+  grid-template-columns: 80px repeat(15, 1fr);
+  gap: 0;
+  background-color: #e8f4f8;
+  border-bottom: 2px solid #38aad9;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  overflow: visible;
+}
+
+.time-grid-header-cell {
+  padding: 0.75rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #38aad9;
+  text-align: center;
+  border-right: 1px solid #ddd;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  overflow: visible;
+}
+
+.time-grid-row {
+  display: grid;
+  grid-template-columns: 80px repeat(15, 1fr);
+  gap: 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.time-grid-day-label {
+  padding: 1rem 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+  background-color: #f0f0f0;
+  text-align: center;
+  border-right: 2px solid #38aad9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.time-grid-cell {
+  padding: 0.75rem 0.5rem;
+  border-right: 1px solid #e0e0e0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transition: all 0.2s ease;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  height: 3.5rem;
+}
+
+.time-grid-cell:hover {
+  background-color: #e8f4f8;
+}
+
+.time-grid-cell--selected {
+  background-color: #38aad9;
+}
+
+.time-grid-checkbox {
+  width: 1.4rem;
+  height: 1.4rem;
+  cursor: pointer;
+  accent-color: #38aad9;
+}
+
+.time-grid-cell--selected .time-grid-checkbox {
+  accent-color: white;
+}
+
+/* ===== LESSONS PER WEEK ===== */
+.lessons-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.lesson-btn {
+  padding: 0.75rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  background-color: #fff;
+  color: #333;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.lesson-btn:hover {
+  border-color: #38aad9;
+  background-color: #f0f8ff;
+}
+
+.lesson-btn--selected {
+  background-color: #38aad9;
+  color: white;
+  border-color: #38aad9;
+  box-shadow: 0 2px 8px rgba(56, 170, 217, 0.3);
+}
+
+.custom-lessons {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  border-left: 4px solid #38aad9;
+}
+

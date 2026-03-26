@@ -1,4 +1,5 @@
-import { ref, Ref } from 'vue'
+import { ref } from 'vue'
+import type { Ref } from 'vue'
 
 interface FetchOptions<T> {
   /**
@@ -84,7 +85,7 @@ interface FetchState<T> {
  * 2. With transformation:
  *    const { data: lessons } = useFetch(
  *      () => lessonService.getLessons({filters}),
- *      { 
+ *      {
  *        initialValue: [],
  *        transform: (response) => response.lessons.slice(0, 5) // Top 5 only
  *      }

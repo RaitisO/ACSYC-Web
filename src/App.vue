@@ -48,5 +48,4 @@ body {
   background: #fff9d8;
 }
 
-/* Remove the old section styles from here */
 </style>

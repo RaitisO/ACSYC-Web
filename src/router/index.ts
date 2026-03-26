@@ -16,37 +16,22 @@ const router = createRouter({
     {
       path: '/register',
       name: 'register',
-      component: () => import('../views/auth/RegisterView.vue'),
+      component: () => import('../views/public/RegisterView.vue'),
     },
     {
-      path: '/registration-pending',
-      name: 'registration-pending',
-      component: () => import('../views/auth/RegistrationPendingView.vue'),
+      path: '/verify/:token',
+      name: 'verify',
+      component: () => import('../views/public/VerificationView.vue'),
     },
     {
-      path: '/register-teacher',
-      name: 'register-teacher',
-      component: () => import('../views/auth/RegisterTeacherView.vue'),
-    },
-    {
-      path: '/teacher-registered',
-      name: 'teacher-registered',
-      component: () => import('../views/auth/TeacherRegisteredView.vue'),
+      path: '/register/success',
+      name: 'register-success',
+      component: () => import('../views/public/RegistrationSuccessView.vue'),
     },
     {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('../views/DashboardView.vue'),
-    },
-    {
-      path: '/admin/applications',
-      name: 'admin-applications',
-      component: () => import('../views/admin/AdminApplicationsView.vue'),
-    },
-    {
-      path: '/test-styles',
-      name: 'test-styles',
-      component: () => import('../views/TestStylesView.vue'),
     },
   ],
 })

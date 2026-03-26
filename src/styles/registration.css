@@ -1,0 +1,487 @@
+/**
+ * Registration Module Styles
+ *
+ * Comprehensive styling for multi-step registration flow
+ * Includes:
+ * - Registration container and header
+ * - Form steps and layouts
+ * - Navigation buttons
+ * - Alerts and error messages
+ * - Responsive design for all screen sizes
+ */
+
+/* ===== Registration Container ===== */
+.registration-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #38aad9 0%, #9bbf19 100%);
+  padding: 2rem 1rem;
+  position: relative;
+}
+
+.registration-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+/* ===== Common Elements ===== */
+.back-home-btn {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.back-home-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: white;
+  transform: translateY(-2px);
+}
+
+/* ===== Registration Header ===== */
+.registration-header {
+  text-align: center;
+  color: white;
+  margin-bottom: 2rem;
+  margin-top: 2rem;
+  position: relative;
+  z-index: 5;
+}
+
+.registration-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.family-type-label {
+  margin: 0;
+  font-size: 1rem;
+  opacity: 0.95;
+  font-weight: 500;
+}
+
+/* ===== Form Container ===== */
+.form-container {
+  max-width: 700px;
+  margin: 0 auto 4rem;
+  background-color: white;
+  border-radius: 12px;
+  padding: 3rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.5s ease-out;
+  position: relative;
+  z-index: 5;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Form Step ===== */
+.form-step {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.form-step h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.step-description {
+  margin: 0 0 2rem 0;
+  color: #666;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* ===== Family Type Selection ===== */
+.family-type-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.family-type-btn {
+  padding: 1.5rem;
+  border: 2px solid #ddd;
+  background-color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.family-type-btn:hover {
+  border-color: #38aad9;
+  background-color: #f8fbfd;
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(56, 170, 217, 0.1);
+}
+
+.family-type-btn--active {
+  border-color: #38aad9;
+  background-color: #e8f5ff;
+  box-shadow: 0 4px 12px rgba(56, 170, 217, 0.2);
+}
+
+.btn-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.btn-description {
+  font-size: 0.85rem;
+  color: #999;
+}
+
+/* ===== Subjects Section ===== */
+.subjects-section,
+.availability-section {
+  margin-bottom: 2rem;
+}
+
+.section-label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 1rem;
+}
+
+.required-asterisk {
+  color: #e74c3c;
+  font-weight: 700;
+}
+
+.subjects-grid,
+.days-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+/* ===== Form Actions ===== */
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex: 1;
+  min-width: 150px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn--primary {
+  background-color: #38aad9;
+  color: white;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background-color: #2a8ab8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(56, 170, 217, 0.3);
+}
+
+.btn--secondary {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  flex: 1;
+  min-width: auto;
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background-color: #e0e0e0;
+  transform: translateY(-2px);
+}
+
+.btn--success {
+  background-color: #9bbf19;
+  color: white;
+}
+
+.btn--success:hover:not(:disabled) {
+  background-color: #7da915;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(155, 191, 25, 0.3);
+}
+
+.btn--abort {
+  background-color: #e74c3c;
+  color: white;
+  flex: 0 1 auto;
+  min-width: auto;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+}
+
+.btn--abort:hover:not(:disabled) {
+  background-color: #c0392b;
+}
+
+/* ===== Alerts ===== */
+.alert {
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alert--error {
+  background-color: #fff5f5;
+  border: 1px solid #fdd;
+  color: #c0392b;
+}
+
+.alert--success {
+  background-color: #f0fdf4;
+  border: 1px solid #ddf5e0;
+  color: #27ae60;
+}
+
+.alert-icon {
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.alert-message {
+  flex: 1;
+  line-height: 1.5;
+}
+
+/* ===== Verification Container ===== */
+.verification-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #38aad9 0%, #9bbf19 100%);
+  padding: 2rem 1rem;
+  position: relative;
+}
+
+.verification-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+.verification-header {
+  text-align: center;
+  color: white;
+  margin-bottom: 2rem;
+  margin-top: 5rem;
+  position: relative;
+  z-index: 5;
+}
+
+.verification-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.verification-header p {
+  margin: 0;
+  font-size: 1rem;
+  opacity: 0.95;
+}
+
+.verification-content {
+  max-width: 700px;
+  margin: 0 auto;
+  background-color: white;
+  border-radius: 12px;
+  padding: 3rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  position: relative;
+  z-index: 5;
+}
+
+.verification-step h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  color: #333;
+  font-weight: 600;
+}
+
+/* ===== Form Error ===== */
+.form-error {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.85rem;
+  color: #e74c3c;
+}
+
+/* ===== Responsive Design ===== */
+@media (max-width: 768px) {
+  .back-home-btn {
+    top: 1rem;
+    left: 1rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  .registration-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .form-container {
+    padding: 1.5rem;
+    margin: 0 auto 2rem;
+  }
+
+  .family-type-options {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .form-step h2 {
+    font-size: 1.25rem;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .btn {
+    min-width: auto;
+  }
+
+  .btn--abort {
+    order: -1;
+  }
+
+  .subjects-grid,
+  .days-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .verification-content {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .registration-container {
+    padding: 1rem;
+  }
+
+  .registration-header {
+    margin-top: 3.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .registration-header h1 {
+    font-size: 1.3rem;
+  }
+
+  .form-container {
+    padding: 1.25rem;
+    border-radius: 8px;
+  }
+
+  .form-step h2 {
+    font-size: 1.1rem;
+  }
+
+  .step-description {
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .family-type-btn {
+    padding: 1rem;
+    gap: 0.5rem;
+  }
+
+  .btn-icon {
+    font-size: 2rem;
+  }
+
+  .btn-title {
+    font-size: 1rem;
+  }
+
+  .verification-header {
+    margin-top: 4rem;
+  }
+
+  .verification-content {
+    padding: 1.25rem;
+  }
+}

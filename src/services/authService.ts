@@ -50,13 +50,34 @@ class AuthService {
    */
   async login(email: string, password: string): Promise<LoginResponse> {
     try {
-      const response = await apiService.post('/login', {
+      console.log('[authService] 🔐 Attempting login for:', email)
+      const payload = {
         email,
         password,
-      })
+      }
+      console.log('[authService] 📤 Sending payload:', payload)
+      
+      const response = await apiService.post('/login', payload)
+      
+      console.log('[authService] ✅ Login response received:', response)
+      console.log('[authService] ✅ Response type:', typeof response)
+      console.log('[authService] ✅ Response keys:', Object.keys(response || {}))
+      console.log('[authService] ✅ Response.user:', response?.user)
+      console.log('[authService] ✅ Response.message:', response?.message)
+      
+      if (!response || typeof response !== 'object') {
+        console.error('[authService] ❌ Response is not an object:', response)
+        throw new Error('Invalid response format')
+      }
+      
       logger.info('Login successful', { email }, 'authService')
-      return response.data
-    } catch (error) {
+      return response as LoginResponse
+    } catch (error: any) {
+      console.log('[authService] ❌ Login error caught:', error)
+      console.log('[authService] ❌ Error response:', error.response?.data)
+      console.log('[authService] ❌ Error status:', error.response?.status)
+      console.log('[authService] ❌ Error message:', error.message)
+      
       const appError = errorService.handleError(error, 'authService')
       logger.error('Login failed', { email, error: appError }, 'authService')
       throw appError

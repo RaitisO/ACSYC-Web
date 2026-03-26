@@ -37,6 +37,9 @@ const handleLogin = async () => {
   errorDetails.value = ''
   approvalStatus.value = null
 
+  console.log('[LoginView] 🔐 handleLogin called')
+  console.log('[LoginView] 📧 Email:', email.value)
+
   // Update field values with actual input values before validation
   setFieldValue('email', email.value)
   setFieldValue('password', password.value)
@@ -44,27 +47,54 @@ const handleLogin = async () => {
   // Validate email field
   if (!validateField('email')) {
     errorMessage.value = 'Please enter a valid email address'
+    console.log('[LoginView] ❌ Email validation failed')
     return
   }
 
   // Validate password field
   if (!validateField('password')) {
     errorMessage.value = 'Password is required'
+    console.log('[LoginView] ❌ Password validation failed')
     return
   }
 
+  console.log('[LoginView] ✅ Form validation passed')
   isLoading.value = true
 
   try {
+    console.log('[LoginView] 📤 Calling authService.login...')
     const data = await authService.login(email.value, password.value)
 
-    console.log('Login successful:', data)
+    console.log('[LoginView] ✅ Login returned, data type:', typeof data)
+    console.log('[LoginView] ✅ Login returned, data:', data)
+    console.log('[LoginView] ✅ Login returned, data.user:', data?.user)
+    console.log('[LoginView] ✅ Login returned, data.message:', data?.message)
+
+    if (!data || !data.user) {
+      console.error('[LoginView] ❌ Response missing user data:', data)
+      errorMessage.value = 'Login response invalid: missing user data'
+      return
+    }
+
+    console.log('[LoginView] ✅ Login successful: ', data.user)
     // Store user in both userStore and localStorage
+    console.log('[LoginView] 💾 Storing user in userStore...')
     userStore.login(data.user)
+    console.log('[LoginView] 💾 Storing user in localStorage...')
     localStorage.setItem('user', JSON.stringify(data.user))
-    router.push('/dashboard')
+    
+    console.log('[LoginView] 🚀 About to redirect to dashboard...')
+    console.log('[LoginView] 🚀 userStore.isAuthenticated:', userStore.isAuthenticated)
+    console.log('[LoginView] 🚀 userStore.user:', userStore.user)
+    
+    await router.push('/dashboard')
+    console.log('[LoginView] 🚀 Successfully redirected to dashboard')
   } catch (error: any) {
-    console.error('Login error:', error)
+    console.error('[LoginView] ❌ Login error caught:', error)
+    console.error('[LoginView] ❌ Error type:', error.constructor.name)
+    console.error('[LoginView] ❌ Error message:', error.message)
+    console.error('[LoginView] ❌ Error stack:', error.stack)
+    console.error('[LoginView] ❌ Full error:', error)
 
     // Handle approval status errors
     if (error.response?.data?.status === 'pending') {

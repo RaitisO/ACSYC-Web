@@ -6,15 +6,22 @@ export const useUserStore = defineStore('user', () => {
   // State
   const currentUser = ref<{
     id: string
-    username: string
+    username?: string
     email: string
     role: string
     firstName?: string
     lastName?: string
+    first_name?: string
+    last_name?: string
   } | null>(null)
 
   const isAuthenticated = computed(() => currentUser.value !== null)
   const userRole = computed(() => currentUser.value?.role || null)
+  
+  /**
+   * User - alias for currentUser for convenience
+   */
+  const user = computed(() => currentUser.value)
 
   /**
    * Check if user has a specific role
@@ -83,6 +90,7 @@ export const useUserStore = defineStore('user', () => {
 
   return {
     currentUser,
+    user,
     isAuthenticated,
     userRole,
     isAdmin,

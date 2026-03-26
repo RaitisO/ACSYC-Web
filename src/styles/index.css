@@ -18,12 +18,7 @@
 /* ===== COMPONENT STYLES ===== */
 /* Component-specific styles will be imported here */
 @import './components/sections.css';
-/* @import './components/forms.css'; */
-/* @import './components/modals.css'; */
-/* @import './components/cards.css'; */
-/* @import './components/navigation.css'; */
-/* @import './components/sections.css'; */
-/* @import './components/tables.css'; */
+@import './components/registration.css';
 
 /* ===== LAYOUT STYLES (To be added in Phase 2) ===== */
 /* Layout utilities and container styles */

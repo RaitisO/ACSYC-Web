@@ -62,12 +62,20 @@ class ApiService {
       }
     }
 
+    console.log(`[apiService] 📤 ${defaultOptions.method || 'GET'} ${url}`)
+    if (defaultOptions.body) {
+      console.log(`[apiService] 📦 Request body:`, defaultOptions.body)
+    }
+
     const response = await fetch(url, defaultOptions)
     
+    console.log(`[apiService] 📥 Response status: ${response.status}`)
+
     // Check if CSRF token needs refresh (401 with CSRF error)
     if (response.status === 401) {
       const data = await response.json().catch(() => ({}))
       if (data.error?.includes('CSRF')) {
+        console.log('[apiService] ⚠️ CSRF token invalid, refreshing...')
         this.initCSRFToken()
       }
     }
@@ -143,13 +151,22 @@ class ApiService {
       data = { message: response.statusText }
     }
 
+    console.log(`[apiService] 📋 Response data:`, data)
+    console.log(`[apiService] 📋 Response data keys:`, Object.keys(data || {}))
+    console.log(`[apiService] 📋 Response data.user:`, data?.user)
+    console.log(`[apiService] 📋 Response data.message:`, data?.message)
+
     if (!response.ok) {
+      console.error(`[apiService] ❌ API Error - Status: ${response.status}`)
+      console.error(`[apiService] ❌ API Error - Data:`, data)
       const error = new Error(data.error || data.message || 'API request failed')
       ;(error as any).status = response.status
-      ;(error as any).response = data
+      ;(error as any).response = { status: response.status, data }
       throw error
     }
 
+    console.log(`[apiService] ✅ Response OK`)
+    console.log(`[apiService] ✅ Returning data:`, data)
     return data
   }
 }

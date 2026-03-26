@@ -26,6 +26,12 @@ const selectedLesson = ref<any>(null)
 const movedEventInfo = ref<any>(null)
 const calendarRef = ref<any>(null)
 
+// Modal states - THESE WERE MISSING!
+const showLessonModal = ref(false)
+const showEditModal = ref(false)
+const showMoveConfirmModal = ref(false)
+const showConnectionModal = ref(false)
+
 const newLesson = ref({
   teacher: '',
   student: '',

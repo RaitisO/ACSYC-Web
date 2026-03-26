@@ -75,7 +75,7 @@ class ErrorService {
     if (status === 401) {
       return {
         type: 'auth',
-        message: 'Your session has expired. Please log in again.',
+        message: data?.message || data?.error || 'Your session has expired. Please log in again.',
         code: 'AUTH_EXPIRED',
         statusCode: 401,
         details: { context, error: data },
@@ -87,11 +87,7 @@ class ErrorService {
     if (status === 403) {
       return {
         type: 'auth',
-        message: 'You do not have permission to perform this action.',
-        code: 'AUTH_FORBIDDEN',
-        statusCode: 403,
-        details: { context, error: data },
-        retryable: false,
+	    message: data?.message || data?.error || 'You do not have permission to perform this action.',
       }
     }
 
@@ -135,7 +131,7 @@ class ErrorService {
     if (status >= 500) {
       return {
         type: 'server',
-        message: 'Server error. Please try again in a moment.',
+        message: data?.message || data?.error || 'Server error. Please try again in a moment.',
         code: 'SERVER_ERROR',
         statusCode: status,
         details: { context, error: data },
@@ -146,7 +142,7 @@ class ErrorService {
     // Any other HTTP error
     return {
       type: 'server',
-      message: data.message || `Request failed with status ${status}`,
+      message: data?.message || data?.error || `Request failed with status ${status}`,
       code: `HTTP_${status}`,
       statusCode: status,
       details: { context, error: data },
