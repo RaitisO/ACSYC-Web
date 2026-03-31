@@ -29,6 +29,11 @@ const router = createRouter({
       component: () => import('../views/public/RegistrationSuccessView.vue'),
     },
     {
+      path: '/activate/:token',
+      name: 'activate',
+      component: () => import('../views/auth/ActivationView.vue'),
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('../views/DashboardView.vue'),

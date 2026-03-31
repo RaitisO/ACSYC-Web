@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFormValidation, ValidationRules } from '@/composables/useFormValidation'
+import PasswordChangeModal from '@/components/PasswordChangeModal.vue'
 import { authService } from '@/services'
 import { useUserStore } from '@/stores'
 import '../../styles/views/auth.css'
@@ -14,6 +15,10 @@ const errorMessage = ref('')
 const errorDetails = ref('')
 const approvalStatus = ref<'pending' | 'rejected' | null>(null)
 const isLoading = ref(false)
+
+// Password change modal state
+const showPasswordChangeModal = ref(false)
+const passwordChangeError = ref('')
 
 // Form validation
 const { registerField, validateField, validateForm, setFieldValue } = useFormValidation()
@@ -82,13 +87,20 @@ const handleLogin = async () => {
     userStore.login(data.user)
     console.log('[LoginView] 💾 Storing user in localStorage...')
     localStorage.setItem('user', JSON.stringify(data.user))
-    
-    console.log('[LoginView] 🚀 About to redirect to dashboard...')
-    console.log('[LoginView] 🚀 userStore.isAuthenticated:', userStore.isAuthenticated)
-    console.log('[LoginView] 🚀 userStore.user:', userStore.user)
-    
-    await router.push('/dashboard')
-    console.log('[LoginView] 🚀 Successfully redirected to dashboard')
+
+    // Check if user needs to change password (first login)
+    // This would be indicated by a flag in the response or by checking if password is temporary
+    if (data.requires_password_change) {
+      console.log('[LoginView] 🔄 First login detected - showing password change modal')
+      showPasswordChangeModal.value = true
+    } else {
+      console.log('[LoginView] 🚀 About to redirect to dashboard...')
+      console.log('[LoginView] 🚀 userStore.isAuthenticated:', userStore.isAuthenticated)
+      console.log('[LoginView] 🚀 userStore.user:', userStore.user)
+      
+      await router.push('/dashboard')
+      console.log('[LoginView] 🚀 Successfully redirected to dashboard')
+    }
   } catch (error: any) {
     console.error('[LoginView] ❌ Login error caught:', error)
     console.error('[LoginView] ❌ Error type:', error.constructor.name)
@@ -118,6 +130,19 @@ const goHome = () => {
 }
 const goToRegister = () => {
   router.push('/register')
+}
+
+const handlePasswordChanged = () => {
+  console.log('[LoginView] ✅ Password changed successfully')
+  showPasswordChangeModal.value = false
+  passwordChangeError.value = ''
+  // Redirect to dashboard after password change
+  router.push('/dashboard')
+}
+
+const handlePasswordChangeError = (error: string) => {
+  console.error('[LoginView] ❌ Password change error:', error)
+  passwordChangeError.value = error
 }
 </script>
 
@@ -170,4 +195,11 @@ const goToRegister = () => {
       </div>
     </div>
   </div>
+
+  <!-- Password Change Modal (shown on first login) -->
+  <PasswordChangeModal
+    :visible="showPasswordChangeModal"
+    @password-changed="handlePasswordChanged"
+    @error="handlePasswordChangeError"
+  />
 </template>

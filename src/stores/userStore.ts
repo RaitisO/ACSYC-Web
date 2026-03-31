@@ -88,6 +88,20 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /**
+   * Change user password (called on first login)
+   */
+  const changePassword = async (newPassword: string) => {
+    try {
+      const response = await authService.changePassword(newPassword)
+      console.log('Password changed successfully')
+      return response
+    } catch (error) {
+      console.error('Failed to change password:', error)
+      throw error
+    }
+  }
+
   return {
     currentUser,
     user,

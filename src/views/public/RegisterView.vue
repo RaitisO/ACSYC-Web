@@ -144,8 +144,7 @@ const validateCurrentStep = (): boolean => {
         store.studentInfo.first_name.trim() !== '' &&
         store.studentInfo.last_name.trim() !== '' &&
         store.studentInfo.date_of_birth.trim() !== '' &&
-        store.studentInfo.email.trim() !== '' &&
-        store.studentInfo.interests.trim() !== ''
+        store.studentInfo.email.trim() !== ''
       )
     case 4:
       return (
@@ -437,10 +436,8 @@ const selectedSubjects = computed(() => {
 
         <FormInput
           v-model="store.studentInfo.interests"
-          label="Interests & Hobbies"
+          label="Interests & Hobbies (Optional)"
           placeholder="e.g., Mathematics, Science, Music, Sports, etc."
-          required
-
         />
       </div>
 

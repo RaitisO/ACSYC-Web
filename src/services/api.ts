@@ -9,6 +9,7 @@ interface FetchOptions extends RequestInit {
 class ApiService {
   private baseURL: string
   private csrfToken: string | null = null
+  private csrfTokenPromise: Promise<string | null> | null = null
 
   constructor(baseURL?: string) {
     // Use environment variable if available, otherwise fallback to localhost
@@ -17,11 +18,59 @@ class ApiService {
   }
 
   /**
-   * Initialize CSRF token from meta tag
+   * Initialize CSRF token - first try meta tag, then fetch from backend
    */
   private initCSRFToken() {
     const metaTag = document.querySelector('meta[name="csrf-token"]')
     this.csrfToken = metaTag?.getAttribute('content') || null
+    
+    // If no token in meta tag, fetch from backend
+    if (!this.csrfToken) {
+      console.log('[apiService] 🔐 No CSRF token in meta tag, fetching from backend...')
+      this.fetchCSRFToken()
+    }
+  }
+
+  /**
+   * Fetch CSRF token from backend
+   */
+  private fetchCSRFToken(): Promise<string | null> {
+    // Return existing promise if already fetching
+    if (this.csrfTokenPromise) {
+      return this.csrfTokenPromise
+    }
+
+    this.csrfTokenPromise = fetch(`${this.baseURL}/csrf-token`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+      .then((response) => {
+        if (response.ok) {
+          return response.json()
+        }
+        throw new Error('Failed to fetch CSRF token')
+      })
+      .then((data) => {
+        // The backend returns { csrf_token: "..." }
+        const token = data.csrf_token || data.token
+        if (token) {
+          this.csrfToken = token
+          console.log('[apiService] ✅ CSRF token fetched and cached')
+          return token
+        }
+        console.error('[apiService] ❌ No token in CSRF response', data)
+        return null
+      })
+      .catch((error) => {
+        console.error('[apiService] ❌ Failed to fetch CSRF token:', error)
+        return null
+      })
+      .finally(() => {
+        // Reset promise so next request can try again if needed
+        this.csrfTokenPromise = null
+      })
+
+    return this.csrfTokenPromise
   }
 
   /**
@@ -46,6 +95,7 @@ class ApiService {
     options: FetchOptions = {}
   ): Promise<Response> {
     const url = `${this.baseURL}${endpoint}`
+    const method = (options.method || 'GET').toUpperCase()
     
     const defaultOptions: FetchOptions = {
       headers: {
@@ -55,14 +105,22 @@ class ApiService {
       ...options,
     }
 
-    // Add CSRF token for state-changing requests
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes((options.method || 'GET').toUpperCase())) {
+    // Ensure CSRF token is available for state-changing requests
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+      // If we don't have a token, fetch it first
+      if (!this.csrfToken) {
+        await this.fetchCSRFToken()
+      }
+      
       if (this.csrfToken) {
         (defaultOptions.headers as Record<string, string>)['X-CSRF-Token'] = this.csrfToken
+        console.log(`[apiService] 🔐 Added CSRF token to ${method} request`)
+      } else {
+        console.warn(`[apiService] ⚠️ No CSRF token available for ${method} request`)
       }
     }
 
-    console.log(`[apiService] 📤 ${defaultOptions.method || 'GET'} ${url}`)
+    console.log(`[apiService] 📤 ${method} ${url}`)
     if (defaultOptions.body) {
       console.log(`[apiService] 📦 Request body:`, defaultOptions.body)
     }
@@ -76,7 +134,8 @@ class ApiService {
       const data = await response.json().catch(() => ({}))
       if (data.error?.includes('CSRF')) {
         console.log('[apiService] ⚠️ CSRF token invalid, refreshing...')
-        this.initCSRFToken()
+        this.csrfToken = null
+        await this.fetchCSRFToken()
       }
     }
 

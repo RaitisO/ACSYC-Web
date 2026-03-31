@@ -20,54 +20,78 @@ const goHome = () => {
     <!-- Main Content -->
     <div class="success-content">
       <div class="info-card">
-        <h2>What happens next?</h2>
+        <h2>What Happens Next?</h2>
         
         <div class="steps">
           <div class="step">
             <div class="step-number">1</div>
             <div class="step-content">
-              <h3>Check Your Email</h3>
+              <h3>Application Under Review</h3>
               <p>
-                We've sent a verification email to your inbox. 
-                <strong>Click the verification link</strong> to confirm your email address.
+                Your registration has been received and is now pending review by our admin team. 
+                This typically takes <strong>1-2 business days</strong>.
               </p>
-              <p class="note">The link expires in 48 hours.</p>
+              <p class="note">📧 We'll notify you via email once a decision has been made.</p>
             </div>
           </div>
 
           <div class="step">
             <div class="step-number">2</div>
             <div class="step-content">
-              <h3>Admin Review</h3>
+              <h3>Receive Activation Link</h3>
               <p>
-                Your application will be reviewed by our admin team. 
-                This typically takes <strong>1-2 business days</strong>.
+                Once approved, you'll receive an email with an <strong>activation link</strong>. 
+                This link will allow you to create your parent and student accounts.
               </p>
-              <p class="note">We'll notify you via email once approved.</p>
+              <p class="note">⏰ The activation link is valid for <strong>7 days</strong>.</p>
             </div>
           </div>
 
           <div class="step">
             <div class="step-number">3</div>
             <div class="step-content">
-              <h3>Create Your Accounts</h3>
+              <h3>Click Activation Link</h3>
               <p>
-                Once approved, you and your student will receive instructions 
-                to create your login accounts using the email addresses provided.
+                Click the link in the approval email to activate your accounts. 
+                Your parent and student accounts will be created automatically.
               </p>
-              <p class="note">Parent and student accounts are separate.</p>
+              <p class="note">This usually takes less than a minute to complete.</p>
             </div>
           </div>
 
           <div class="step">
             <div class="step-number">4</div>
             <div class="step-content">
-              <h3>Start Learning</h3>
+              <h3>Receive Login Credentials</h3>
               <p>
-                Log in to your account to view available lessons, 
-                book sessions, and connect with your teacher.
+                After activation, you'll receive an email with temporary passwords 
+                for both parent and student accounts.
               </p>
-              <p class="note">Welcome to ACSYC!</p>
+              <p class="note">🔐 Keep these credentials safe and confidential.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+              <h3>Set Permanent Password</h3>
+              <p>
+                Log in with your temporary password. On your first login, 
+                you'll be asked to create a permanent password.
+              </p>
+              <p class="note">Choose a strong, secure password that you can remember.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-number">6</div>
+            <div class="step-content">
+              <h3>Start Using ACSYC</h3>
+              <p>
+                Once you've set your permanent password, you're all set! 
+                You can now log in and start exploring lessons and features.
+              </p>
+              <p class="note">Welcome to ACSYC! We're excited to have you.</p>
             </div>
           </div>
         </div>
@@ -75,25 +99,27 @@ const goHome = () => {
 
       <!-- Key Information Box -->
       <div class="info-box">
-        <h3>Important Reminders</h3>
+        <h3>📌 Important Information</h3>
         <ul>
-          <li>Check your <strong>spam/junk folder</strong> if you don't see the verification email</li>
-          <li>Keep your login credentials safe and confidential</li>
-          <li>The verification link expires in 48 hours - act promptly</li>
-          <li>If you have questions, contact our support team</li>
+          <li><strong>Check your email</strong> regularly for updates on your application status</li>
+          <li><strong>Don't forget</strong> - the activation link expires in 7 days</li>
+          <li>If you miss the window, you can request a new activation link from support</li>
+          <li>Check your <strong>spam/junk folder</strong> if you don't receive emails</li>
+          <li>Keep your login credentials private and secure</li>
+          <li>If you have questions, contact <strong>support@acsyc.lv</strong></li>
         </ul>
       </div>
 
       <!-- Success Badges -->
       <div class="success-badges">
         <div class="badge">
-          <span class="badge-text">Email Sent</span>
+          <span class="badge-text">✓ Application Received</span>
         </div>
         <div class="badge">
-          <span class="badge-text">Application Stored</span>
+          <span class="badge-text">⏳ Awaiting Review</span>
         </div>
         <div class="badge">
-          <span class="badge-text">Pending Review</span>
+          <span class="badge-text">📧 Email Notifications Enabled</span>
         </div>
       </div>
     </div>

@@ -18,6 +18,50 @@ import type { RegistrationApplication } from '@/types/registration'
  *   const { submitApplication, isSubmitting, error } = useRegistration()
  *   await submitApplication(formData)
  */
+/**
+ * Map time strings to lesson_time_slot IDs
+ * Availability times are stored as strings: ['8:00', '9:00', '10:15', ...]
+ * These map to lesson_time_slot IDs: [1, 2, 3, ...]
+ */
+function convertTimesToSlotIds(timeString: string): number | null {
+  const availabilityTimes = [
+    '8:00', '9:00', '10:15', '11:15', '12:30', '13:30', '14:45', '15:45',
+    '17:00', '18:00', '19:15', '20:15', '21:30', '22:30', '23:45'
+  ]
+  const index = availabilityTimes.indexOf(timeString)
+  if (index === -1) {
+    console.warn(`[useRegistration] Unknown time string: ${timeString}`)
+    return null
+  }
+  return index + 1 // IDs start at 1
+}
+
+/**
+ * Convert form's availability object to backend format
+ * Form: { monday: ['9:00', '10:15'], tuesday: ['10:15'], ... }
+ * Backend: { monday: [2, 3], tuesday: [3], ... }
+ */
+function convertAvailabilityToBackendFormat(availabilityData: Record<string, string[]>): Record<string, number[]> {
+  const result: Record<string, number[]> = {}
+  
+  for (const [day, times] of Object.entries(availabilityData)) {
+    const slotIds: number[] = []
+    for (const timeStr of times) {
+      const slotId = convertTimesToSlotIds(timeStr)
+      if (slotId !== null) {
+        slotIds.push(slotId)
+      }
+    }
+    // Only include days that have at least one time selected
+    if (slotIds.length > 0) {
+      result[day] = slotIds.sort((a, b) => a - b)
+    }
+  }
+  
+  console.log('[useRegistration] Converted availability:', availabilityData, '→', result)
+  return result
+}
+
 export function useRegistration() {
   const isSubmitting = ref(false)
   const error = ref('')
@@ -80,10 +124,8 @@ export function useRegistration() {
           : formData.subjects_availability.lessons_per_week || 1,
         
         // Availability
-        // NOTE: Form currently stores times as strings (e.g., '9:00'), 
-        // but backend expects integer IDs of lesson_time_slots
-        // For now, sending minimal valid data - form needs redesign to collect time slot IDs
-        availability: { monday: [1] }, // Placeholder - needs time slot ID mapping
+        // Convert form times (strings like '9:00') to lesson_time_slot IDs (numbers like 2)
+        availability: convertAvailabilityToBackendFormat(formData.subjects_availability.availability),
         availability_notes: formData.subjects_availability.custom_times || '',
         grade_in_course: '9', // Default
         

@@ -135,6 +135,25 @@ class AuthService {
       throw appError
     }
   }
+
+  /**
+   * Change user password (called on first login)
+   * @param newPassword New password for the user
+   * @returns Password change confirmation
+   */
+  async changePassword(newPassword: string): Promise<any> {
+    try {
+      const response = await apiService.post('/user/change-password', {
+        new_password: newPassword,
+      })
+      logger.info('Password changed successfully', undefined, 'authService')
+      return response.data
+    } catch (error) {
+      const appError = errorService.handleError(error, 'authService')
+      logger.error('Password change failed', { error: appError }, 'authService')
+      throw appError
+    }
+  }
 }
 
 export default new AuthService()

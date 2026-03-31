@@ -9,6 +9,7 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import TomSelect from 'tom-select'
+import AdminApplicationsView from '@/views/admin/AdminApplicationsView.vue'
 
 defineOptions({
   name: 'AdminDashboard',
@@ -147,9 +148,9 @@ const saveTeacherColor = async () => {
 
   try {
     const response = await fetch(
-      `http://localhost:8080/api/teacher-colors/${selectedTeacherForColor.value.id}`,
+      `http://localhost:8080/api/admin/teacher-colors/${selectedTeacherForColor.value.id}`,
       {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ color_code: colorPickerValue.value }),
@@ -192,7 +193,7 @@ const resetTeacherColor = async () => {
 
   try {
     const response = await fetch(
-      `http://localhost:8080/api/teacher-colors/${selectedTeacherForColor.value.id}`,
+      `http://localhost:8080/api/admin/teacher-colors/${selectedTeacherForColor.value.id}`,
       {
         method: 'DELETE',
         credentials: 'include',
@@ -258,7 +259,7 @@ const openNotesModal = async (parent: any) => {
 // Fetch admin's note about a parent
 const fetchParentNote = async (parentId: number) => {
   try {
-    const response = await fetch(`http://localhost:8080/api/admin-notes/${parentId}`, {
+    const response = await fetch(`http://localhost:8080/api/admin/notes/${parentId}`, {
       credentials: 'include',
     })
 
@@ -297,9 +298,9 @@ const saveParentNote = async () => {
 
   try {
     const response = await fetch(
-      `http://localhost:8080/api/admin-notes/${selectedParentForNotes.value.id}`,
+      `http://localhost:8080/api/admin/notes/${selectedParentForNotes.value.id}`,
       {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
@@ -354,7 +355,7 @@ const deleteParentNote = async () => {
 
   try {
     const response = await fetch(
-      `http://localhost:8080/api/admin-notes/${selectedParentForNotes.value.id}`,
+      `http://localhost:8080/api/admin/notes/${selectedParentForNotes.value.id}`,
       {
         method: 'DELETE',
         credentials: 'include',
@@ -644,7 +645,7 @@ const fetchLessons = async (start: Date, end: Date) => {
 
     // Fetch teacher colors
     try {
-      const colorsResponse = await fetch('http://localhost:8080/api/teacher-colors', {
+      const colorsResponse = await fetch('http://localhost:8080/api/admin/teacher-colors', {
         credentials: 'include',
       })
 
@@ -1142,6 +1143,7 @@ const showLessons = () => {
   fetchDropdownData()
 }
 const showSettings = () => (currentView.value = 'settings')
+const showApplications = () => (currentView.value = 'applications')
 const goBack = () => (currentView.value = 'main')
 
 function handleDateSelect(selectInfo: any) {
@@ -2315,6 +2317,10 @@ const closeMiroBoardModal = () => {
           <h3>All Lessons</h3>
           <p>View and manage all lessons</p>
         </button>
+        <button class="admin-card" @click="showApplications">
+          <h3>Pending Applications</h3>
+          <p>Review and approve family registrations</p>
+        </button>
         <button class="admin-card" @click="showSettings">
           <h3>System Settings</h3>
           <p>Configure platform settings</p>
@@ -2638,6 +2644,14 @@ const closeMiroBoardModal = () => {
       <div class="section-content">
         <p>System settings content coming soon...</p>
       </div>
+    </div>
+
+    <!-- Applications View -->
+    <div v-else-if="currentView === 'applications'" class="section-view">
+      <div class="section-header">
+        <button @click="goBack" class="back-btn">← Back to Admin Panel</button>
+      </div>
+      <AdminApplicationsView />
     </div>
   </div>
 </template>

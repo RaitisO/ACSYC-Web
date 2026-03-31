@@ -1,33 +1,44 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { applicationService } from '@/services'
+import ApplicationDetailsModal from '@/components/ApplicationDetailsModal.vue'
 import '../../styles/views/admin.css'
 
-interface User {
+interface StudentApplication {
   id: string
-  email: string
-  first_name: string
-  last_name: string
-  phone: string
-  date_of_birth: string
-  role: string
-  application_status: string
+  applicant_email: string
+  applicant_first_name: string
+  applicant_last_name: string
+  applicant_phone: string
+  grade_level: string
+  gymnasium_status: string
+  learning_goals_json: string
+  preferred_language: string
+  teacher_preferences_json: string
+  availability_json: string
+  availability_description: string
+  lessons_per_week: number
+  group_lessons_json: string
+  source_of_referral: string
+  is_new_family: boolean
+  existing_parent_email: string
+  parent_email: string
+  parent_phone: string
+  parent_name: string
+  desired_subjects: string
+  status: string
   created_at: string
+  reviewed_by: string
+  reviewed_at: string
+  [key: string]: any
 }
 
-interface ApplicationGroup {
-  primary_member_id: string
-  primary_member_name: string
-  application_date: string
-  members: User[]
-}
-
-const applications = ref<ApplicationGroup[]>([])
+const applications = ref<StudentApplication[]>([])
 const isLoading = ref(true)
 const errorMessage = ref('')
 const successMessage = ref('')
-const expandedApplications = ref<Set<string>>(new Set())
 const processingIds = ref<Set<string>>(new Set())
+const selectedApplication = ref<StudentApplication | null>(null)
 
 onMounted(async () => {
   await fetchApplications()
@@ -39,7 +50,19 @@ const fetchApplications = async () => {
 
   try {
     const response = await applicationService.getApplications()
-    applications.value = response.applications || []
+    console.log('Applications response:', response)
+    
+    // Handle both direct array and wrapped response
+    if (Array.isArray(response)) {
+      applications.value = response
+    } else if (response && response.applications) {
+      applications.value = response.applications
+    } else if (response && Array.isArray(response.data)) {
+      applications.value = response.data
+    } else {
+      console.warn('Unexpected response structure:', response)
+      applications.value = []
+    }
   } catch (error: any) {
     console.error('Error fetching applications:', error)
     errorMessage.value = error.message || 'Failed to load applications'
@@ -48,32 +71,114 @@ const fetchApplications = async () => {
   }
 }
 
-const toggleExpanded = (studentId: string) => {
-  if (expandedApplications.value.has(studentId)) {
-    expandedApplications.value.delete(studentId)
-  } else {
-    expandedApplications.value.add(studentId)
+// Helper function to consolidate time slots with 60-minute gap tolerance
+const consolidateTimeSlots = (availabilityJson: string): string => {
+  if (!availabilityJson) return 'No availability data'
+  
+  try {
+    const availability = JSON.parse(availabilityJson)
+    if (!availability || typeof availability !== 'object') return 'No availability data'
+    
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    const result: string[] = []
+    
+    for (const day of days) {
+      const daySlots = availability[day]
+      if (!daySlots || !Array.isArray(daySlots) || daySlots.length === 0) continue
+      
+      // Parse and sort slots
+      const parsed = daySlots.map(slot => {
+        const [start, end] = slot.split('-')
+        return {
+          start: timeToMinutes(start),
+          end: timeToMinutes(end),
+          display: slot
+        }
+      }).sort((a, b) => a.start - b.start)
+      
+      // Consolidate slots with up to 60-minute gaps
+      const consolidated: any[] = []
+      for (const slot of parsed) {
+        if (consolidated.length === 0) {
+          consolidated.push(slot)
+        } else {
+          const lastSlot = consolidated[consolidated.length - 1]
+          const gapMinutes = slot.start - lastSlot.end
+          
+          if (gapMinutes <= 60) {
+            // Merge slots
+            lastSlot.end = Math.max(lastSlot.end, slot.end)
+          } else {
+            // Keep as separate slot
+            consolidated.push(slot)
+          }
+        }
+      }
+      
+      // Format for display
+      const displaySlots = consolidated.map(slot => 
+        `${minutesToTime(slot.start)}-${minutesToTime(slot.end)}`
+      ).join('; ')
+      
+      const dayName = day.charAt(0).toUpperCase() + day.slice(1)
+      result.push(`${dayName}: ${displaySlots}`)
+    }
+    
+    return result.length > 0 ? result.join(' | ') : 'No availability'
+  } catch (error) {
+    console.error('Error parsing availability:', error)
+    return 'Invalid availability data'
   }
 }
 
-const approveApplication = async (studentId: string) => {
+// Helper to convert HH:MM to minutes
+const timeToMinutes = (timeStr: string): number => {
+  const [hours, minutes] = timeStr.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+// Helper to convert minutes back to HH:MM
+const minutesToTime = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
+}
+
+// Helper to parse desired subjects
+const parseSubjects = (subjectsData: string): string => {
+  if (!subjectsData) return 'Not specified'
+  
+  try {
+    // Try to parse as JSON array first
+    if (subjectsData.startsWith('[')) {
+      const subjects = JSON.parse(subjectsData)
+      if (Array.isArray(subjects)) {
+        return subjects.join(', ')
+      }
+    }
+    // Otherwise return as-is
+    return subjectsData
+  } catch {
+    return subjectsData
+  }
+}
+
+const approveApplication = async (appId: string) => {
   if (!confirm('Are you sure you want to approve this application?')) {
     return
   }
 
-  processingIds.value.add(studentId)
+  processingIds.value.add(appId)
   errorMessage.value = ''
   successMessage.value = ''
 
   try {
-    await applicationService.approveApplication(studentId)
+    await applicationService.approveApplication(appId)
     successMessage.value = 'Application approved successfully!'
 
-    // Remove from list
-    const index = applications.value.findIndex((app) => app.primary_member_id === studentId)
-    if (index !== -1) {
-      applications.value.splice(index, 1)
-    }
+    // Refresh list
+    await fetchApplications()
+    selectedApplication.value = null
 
     // Clear message after 3 seconds
     setTimeout(() => {
@@ -83,28 +188,26 @@ const approveApplication = async (studentId: string) => {
     console.error('Error approving application:', error)
     errorMessage.value = error.message || 'Failed to approve application'
   } finally {
-    processingIds.value.delete(studentId)
+    processingIds.value.delete(appId)
   }
 }
 
-const rejectApplication = async (studentId: string) => {
+const rejectApplication = async (appId: string) => {
   if (!confirm('Are you sure you want to reject this application? This action cannot be undone.')) {
     return
   }
 
-  processingIds.value.add(studentId)
+  processingIds.value.add(appId)
   errorMessage.value = ''
   successMessage.value = ''
 
   try {
-    await applicationService.rejectApplication(studentId)
+    await applicationService.rejectApplication(appId)
     successMessage.value = 'Application rejected successfully!'
 
-    // Remove from list
-    const index = applications.value.findIndex((app) => app.primary_member_id === studentId)
-    if (index !== -1) {
-      applications.value.splice(index, 1)
-    }
+    // Refresh list
+    await fetchApplications()
+    selectedApplication.value = null
 
     // Clear message after 3 seconds
     setTimeout(() => {
@@ -114,7 +217,7 @@ const rejectApplication = async (studentId: string) => {
     console.error('Error rejecting application:', error)
     errorMessage.value = error.message || 'Failed to reject application'
   } finally {
-    processingIds.value.delete(studentId)
+    processingIds.value.delete(appId)
   }
 }
 
@@ -135,15 +238,24 @@ const formatTime = (dateString: string) => {
   })
 }
 
-const getRoleBadgeClass = (role: string) => {
-  switch (role) {
-    case 'student':
-      return 'badge-student'
-    case 'parent':
-      return 'badge-parent'
-    default:
-      return 'badge-default'
-  }
+const openApplicationModal = (application: StudentApplication) => {
+  selectedApplication.value = application
+}
+
+const closeApplicationModal = () => {
+  selectedApplication.value = null
+}
+
+const handleApplicationApproved = () => {
+  closeApplicationModal()
+  // Refresh applications list
+  fetchApplications()
+}
+
+const handleApplicationRejected = () => {
+  closeApplicationModal()
+  // Refresh applications list
+  fetchApplications()
 }
 </script>
 
@@ -176,85 +288,34 @@ const getRoleBadgeClass = (role: string) => {
 
     <!-- Applications List -->
     <div v-else class="applications-list">
-      <div v-for="app in applications" :key="app.primary_member_id" class="application-card">
+      <div v-for="app in applications" :key="app.id" class="application-card">
         <!-- Application Header -->
         <div class="application-header">
           <div class="student-info">
-            <h2>{{ app.primary_member_name }}</h2>
-            <p class="submission-date">Submitted: {{ formatDate(app.application_date) }} at {{ formatTime(app.application_date) }}</p>
-            <p v-if="app.members.length > 1" class="family-info">
-              {{ app.members.length }} family members registered
-            </p>
-          </div>
-
-          <div class="actions">
-            <button
-              @click="toggleExpanded(app.primary_member_id)"
-              class="expand-btn"
-              :class="{ expanded: expandedApplications.has(app.primary_member_id) }"
-            >
-              {{ expandedApplications.has(app.primary_member_id) ? '▼' : '▶' }} Details
-            </button>
+            <h2>{{ app.applicant_first_name }} {{ app.applicant_last_name }}</h2>
+            <p class="submission-date">Submitted: {{ formatDate(app.created_at) }} at {{ formatTime(app.created_at) }}</p>
           </div>
         </div>
 
-        <!-- Expanded Details -->
-        <div v-if="expandedApplications.has(app.primary_member_id)" class="application-details">
-          <!-- Student Section -->
-          <div class="members-section">
-            <h3>Student Information</h3>
-            <div v-for="member in app.members.filter((m) => m.role === 'student')" :key="member.id" class="member-card">
-              <div class="member-header">
-                <div class="member-name">
-                  {{ member.first_name }} {{ member.last_name }}
-                  <span :class="['member-role', getRoleBadgeClass(member.role)]">{{ member.role }}</span>
-                </div>
-              </div>
-              <div class="member-details">
-                <p><strong>Email:</strong> {{ member.email }}</p>
-                <p><strong>Phone:</strong> {{ member.phone }}</p>
-                <p><strong>Date of Birth:</strong> {{ formatDate(member.date_of_birth) }}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Parents Section -->
-          <div v-if="app.members.filter((m) => m.role === 'parent').length > 0" class="members-section">
-            <h3>Parent(s) Information</h3>
-            <div v-for="member in app.members.filter((m) => m.role === 'parent')" :key="member.id" class="member-card">
-              <div class="member-header">
-                <div class="member-name">
-                  {{ member.first_name }} {{ member.last_name }}
-                  <span :class="['member-role', getRoleBadgeClass(member.role)]">{{ member.role }}</span>
-                </div>
-              </div>
-              <div class="member-details">
-                <p><strong>Email:</strong> {{ member.email }}</p>
-                <p><strong>Phone:</strong> {{ member.phone }}</p>
-                <p><strong>Date of Birth:</strong> {{ formatDate(member.date_of_birth) }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
+        <!-- Action Button -->
         <div class="application-actions">
           <button
-            @click="approveApplication(app.primary_member_id)"
-            class="approve-btn"
-            :disabled="processingIds.has(app.primary_member_id)"
+            @click="openApplicationModal(app)"
+            class="view-details-btn"
           >
-            {{ processingIds.has(app.primary_member_id) ? '⏳' : '✓' }} Approve
-          </button>
-          <button
-            @click="rejectApplication(app.primary_member_id)"
-            class="reject-btn"
-            :disabled="processingIds.has(app.primary_member_id)"
-          >
-            {{ processingIds.has(app.primary_member_id) ? '⏳' : '✕' }} Reject
+            View Details
           </button>
         </div>
       </div>
     </div>
+
+    <!-- Application Details Modal -->
+    <ApplicationDetailsModal
+      :visible="selectedApplication !== null"
+      :application="selectedApplication"
+      @close="closeApplicationModal"
+      @approved="handleApplicationApproved"
+      @rejected="handleApplicationRejected"
+    />
   </div>
 </template>
