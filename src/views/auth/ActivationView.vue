@@ -28,15 +28,18 @@ const validateAndActivateAccounts = async () => {
     // Call backend to validate token and activate accounts
     const response = await applicationService.activateAccounts(activationToken)
     
-    if (response.success) {
+    console.log('Activation response:', response)
+    
+    // Safely check if response has success property
+    if (response && response.success === true) {
       parentEmail.value = response.details?.parent_email || ''
       studentEmail.value = response.details?.student_email || ''
       activationState.value = 'success'
       console.log('✓ Accounts activated successfully')
     } else {
       activationState.value = 'error'
-      errorMessage.value = response.message || 'An unexpected error occurred'
-      console.error('Activation failed:', response.message)
+      errorMessage.value = (response && response.message) || 'An unexpected error occurred'
+      console.error('Activation failed:', errorMessage.value)
     }
   } catch (error: any) {
     console.error('Activation error:', error)
