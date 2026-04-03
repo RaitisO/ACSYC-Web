@@ -30,10 +30,47 @@ const logout = async () => {
   }
 }
 
+// Check if server has restarted (by comparing startup times)
+const checkServerRestart = async () => {
+  try {
+    const response = await apiService.get('/health')
+    const currentStartTime = response.data?.server_started_at
+    
+    // Get previously stored startup time from localStorage
+    const previousStartTime = localStorage.getItem('server_started_at')
+    
+    if (previousStartTime && previousStartTime !== String(currentStartTime)) {
+      console.warn('[DashboardView] 🔄 Server has restarted! Forcing re-authentication.')
+      // Server restarted, force logout
+      userStore.logout()
+      router.push('/login')
+      return false
+    }
+    
+    // Store current startup time
+    if (currentStartTime) {
+      localStorage.setItem('server_started_at', String(currentStartTime))
+    }
+    
+    return true
+  } catch (error) {
+    console.error('[DashboardView] Error checking server restart:', error)
+    // If we can't check, assume server is fine
+    return true
+  }
+}
+
 // Validate session with backend
 const validateSession = async () => {
   isCheckingSession.value = true
   try {
+    // First check if server has restarted
+    const serverValid = await checkServerRestart()
+    if (!serverValid) {
+      isSessionValid.value = false
+      return
+    }
+    
     await apiService.get('/profile')
 
     // Session is valid

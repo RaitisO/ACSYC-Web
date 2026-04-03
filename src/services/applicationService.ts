@@ -172,10 +172,10 @@ class ApplicationService {
       const response = await apiService.delete(`/admin/applications/by-status/${status}`)
       logger.info('Bulk deletion completed', { 
         status,
-        deleted: response.data?.deleted,
-        message: response.data?.message 
+        deleted: response.deleted,
+        message: response.message 
       }, 'applicationService')
-      return response.data
+      return response
     } catch (error) {
       const appError = errorService.handleError(error, 'applicationService')
       logger.error('Failed to delete applications by status', { 

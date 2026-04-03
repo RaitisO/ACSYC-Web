@@ -18,28 +18,33 @@ class ApiService {
   }
 
   /**
-   * Initialize CSRF token - first try meta tag, then fetch from backend
+   * Initialize CSRF token - only check for meta tag
+   * LAZY LOADING: Only fetch from backend when needed (on first POST/PUT/DELETE request)
+   * This ensures a session exists before fetching the token
    */
   private initCSRFToken() {
     const metaTag = document.querySelector('meta[name="csrf-token"]')
     this.csrfToken = metaTag?.getAttribute('content') || null
 
-    // If no token in meta tag, fetch from backend
-    if (!this.csrfToken) {
-      console.log('[apiService]  No CSRF token in meta tag, fetching from backend...')
-      this.fetchCSRFToken()
+    if (this.csrfToken) {
+      console.log('[apiService] ✓ CSRF token found in meta tag')
+    } else {
+      console.log('[apiService] ℹ No CSRF token in meta tag - will fetch lazily when first POST/PUT/DELETE is made')
     }
   }
 
   /**
    * Fetch CSRF token from backend
+   * Called lazily: only when first POST/PUT/DELETE request is made
    */
   private fetchCSRFToken(): Promise<string | null> {
     // Return existing promise if already fetching
     if (this.csrfTokenPromise) {
+      console.log('[apiService] ↻ CSRF token already being fetched, reusing promise')
       return this.csrfTokenPromise
     }
 
+    console.log('[apiService] → Fetching CSRF token from backend (user is now authenticated)')
     this.csrfTokenPromise = fetch(`${this.baseURL}/csrf-token`, {
       method: 'GET',
       credentials: 'include',
@@ -55,14 +60,14 @@ class ApiService {
         const token = data.csrf_token || data.token
         if (token) {
           this.csrfToken = token
-          console.log('[apiService]  CSRF token fetched and cached')
+          console.log('[apiService] ✓ CSRF token fetched and cached successfully')
           return token
         }
-        console.error('[apiService]  No token in CSRF response', data)
+        console.error('[apiService] ✗ No token in CSRF response', data)
         return null
       })
       .catch((error) => {
-        console.error('[apiService]  Failed to fetch CSRF token:', error)
+        console.error('[apiService] ✗ Failed to fetch CSRF token:', error)
         return null
       })
       .finally(() => {
