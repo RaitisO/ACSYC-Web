@@ -123,12 +123,12 @@ const fetchConnectedUsers = async () => {
 const fetchTeacherLessons = async (start: Date, end: Date) => {
   try {
     await fetchLessons(start, end)
-    
+
     // Convert lessons to calendar events
     const calendarApi = getCalendarApi()
     if (calendarApi && lessons.value) {
       calendarApi.removeAllEvents()
-      
+
       const events = lessons.value.map((lesson) => {
         const isOwned = lesson.teacher_id === getCurrentUserId()
         return {
@@ -154,7 +154,7 @@ const fetchTeacherLessons = async (start: Date, end: Date) => {
           },
         }
       })
-      
+
       calendarApi.addEventSource(events)
     }
   } catch (error) {
@@ -274,7 +274,7 @@ const getCalendarApi = () => {
 const handleTeacherEventDrop = (dropInfo: any) => {
   const event = dropInfo.event
   const lesson = lessons.value.find(l => String(l.id) === event.id)
-  
+
   if (!lesson || lesson.teacher_id !== getCurrentUserId()) {
     dropInfo.revert()
     alert('You can only edit your own lessons')
@@ -310,11 +310,11 @@ const handleDateSelect = (info: any) => {
 const handleTeacherEventClick = (clickInfo: any) => {
   const event = clickInfo.event
   const lesson = lessons.value.find(l => String(l.id) === event.id)
-  
+
   if (!lesson) return
 
   const isOwned = lesson.teacher_id === getCurrentUserId()
-  
+
   if (isOwned) {
     composableHandleEventClick(lesson, isOwned)
   } else {
