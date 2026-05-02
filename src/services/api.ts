@@ -94,13 +94,16 @@ class ApiService {
 
   /**
    * Make a request with CSRF protection
+   * Includes automatic retry on CSRF token errors (403)
    */
   private async request(
     endpoint: string,
-    options: FetchOptions = {}
+    options: FetchOptions = {},
+    retryCount: number = 0
   ): Promise<Response> {
     const url = `${this.baseURL}${endpoint}`
     const method = (options.method || 'GET').toUpperCase()
+    const MAX_CSRF_RETRIES = 1 // Prevent infinite loops - only retry once
 
     const defaultOptions: FetchOptions = {
       headers: {
@@ -134,13 +137,23 @@ class ApiService {
 
     console.log(`[apiService]  Response status: ${response.status}`)
 
-    // Check if CSRF token needs refresh (401 with CSRF error)
-    if (response.status === 401) {
-      const data = await response.json().catch(() => ({}))
-      if (data.error?.includes('CSRF')) {
-        console.log('[apiService]  CSRF token invalid, refreshing...')
+    // Handle CSRF token errors (both 401 and 403)
+    // Clone response so we can read the body for error checking AND pass it to handleResponse
+    if ((response.status === 401 || response.status === 403) && retryCount < MAX_CSRF_RETRIES) {
+      const clonedResponse = response.clone()
+      const data = await clonedResponse.json().catch(() => ({}))
+      if (
+        data.error?.includes('CSRF') ||
+        data.error?.includes('csrf') ||
+        data.message?.includes('CSRF') ||
+        data.action?.includes('CSRF')
+      ) {
+        console.log('[apiService]  CSRF token error detected, refreshing token and retrying...')
         this.csrfToken = null
+        this.csrfTokenPromise = null // Reset promise to force fresh fetch
         await this.fetchCSRFToken()
+        // Retry the request with new token
+        return this.request(endpoint, options, retryCount + 1)
       }
     }
 

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { lessonService, connectionService, preferenceService } from '@/services'
-import { useAuth, useConnections, useModal, useModals } from '@/composables'
-import { useConnectionStore, useUiStore } from '@/stores'
+import { useAuth } from '@/composables'
+import { useCalendarLessons } from '@/composables/useCalendarLessons'
+import { useConnectionStore } from '@/stores'
 import '../../styles/views/dashboards.css'
 import FullCalendar from '@fullcalendar/vue3'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import ConnectionsSection from '@/components/sections/ConnectionsSection.vue'
 import ProfileSection from '@/components/sections/ProfileSection.vue'
+import LessonFormModal from '@/components/modals/LessonFormModal.vue'
+import ConfirmMoveModal from '@/components/modals/ConfirmMoveModal.vue'
+import ConfirmDeleteModal from '@/components/modals/ConfirmDeleteModal.vue'
 
 defineOptions({
   name: 'TeacherDashboard',
@@ -42,39 +44,58 @@ interface SelectedLesson {
 // Composables & Stores
 const { getCurrentUserId } = useAuth()
 const connectionStore = useConnectionStore()
-const uiStore = useUiStore()
 
 // Computed: students from connection store
-const students = computed(() =>
+const connectedStudents = computed(() =>
   connectionStore.connections.filter((c) => c.role === 'student'),
 )
 
-// Modal management (using uiStore)
-const modals = useModals({
-  editLesson: { autoClosureTime: 3000 },
-  createLesson: { autoClosureTime: 3000 },
-  moveConfirm: { autoClosureTime: 0 }, // No auto-close for confirmation
-})
+// Initialize calendar composable
+const calendarLessons = useCalendarLessons(getCurrentUserId)
+const {
+  lessons,
+  subjects,
+  students,
+  showLessonModal,
+  showEditModal,
+  showMoveConfirmModal,
+  showDeleteConfirmModal,
+  newLesson,
+  selectedLesson,
+  movedEventInfo,
+  recurringOption,
+  isCreatingLesson,
+  isUpdatingLesson,
+  isDeletingLesson,
+  lessonMessage,
+  editMessage,
+  fetchLessons,
+  fetchDropdownData,
+  createLesson,
+  updateLesson,
+  deleteLesson,
+  confirmEventMove,
+  handleDateSelect: composableHandleDateSelect,
+  handleEventClick: composableHandleEventClick,
+  handleEventDrop: composableHandleEventDrop,
+  closeModal,
+  closeEditModal,
+  closeDeleteConfirmModal,
+  closeMoveConfirmModal,
+  openDeleteConfirmModal,
+  formatForDateTimeInput,
+  formatForBackend,
+  formatDateTime,
+  calculateEndTime,
+} = calendarLessons
 
 // View state
-const currentView = ref<'main' | 'students' | 'calendar' | 'subjects' | 'connections' | 'profile'>(
+const currentView = ref<'main' | 'students' | 'calendar' | 'subjects' | 'profile'>(
   'main',
 )
 
-const subjects = ref<Array<{ id: number; name: string }>>([]) // Dynamic subjects from API
-
-//Calendar state
+// Calendar state
 const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null)
-const selectedTimeSlot = ref({ start: '', end: '' })
-const newLesson = ref({
-  teacher: '',
-  student: '',
-  subject: '',
-  start: '',
-  end: '',
-  isRecurring: false,
-})
-const recurringOption = ref<'this' | 'all'>('this')
 
 // Navigation functions
 const showStudents = async () => {
@@ -86,114 +107,55 @@ const showCalendar = () => {
   // Calendar will auto-fetch on datesSet when mounted
 }
 const showSubjects = () => (currentView.value = 'subjects')
-const showConnections = () => (currentView.value = 'connections')
 const showProfile = () => (currentView.value = 'profile')
 const goBack = () => (currentView.value = 'main')
 
-// Fetch dropdown data (subjects) from backend
-const fetchDropdownData = async () => {
+// Fetch connected users (students)
+const fetchConnectedUsers = async () => {
   try {
-    const response = await fetch('http://localhost:8080/api/dropdown-data', {
-      credentials: 'include',
-    })
-
-    if (!response.ok) throw new Error('Failed to fetch dropdown data')
-
-    const data = (await response.json()) as { subjects: Array<{ id: number; name: string }> }
-    subjects.value = data.subjects || []
-    console.log('Subjects loaded:', subjects.value)
+    await connectionStore.fetchConnections()
   } catch (error) {
-    console.error('Error fetching dropdown data:', error)
-    subjects.value = []
+    console.error('Error fetching connected users:', error)
   }
 }
 
-// Fetch teacher's lessons and their connected students' lessons with date range
-const fetchTeacherCalendarLessons = async (start: Date, end: Date) => {
+// Fetch and display lessons for this teacher's view
+const fetchTeacherLessons = async (start: Date, end: Date) => {
   try {
-    const teacherId = getCurrentUserId()
-    if (!teacherId) return
-
-    const startStr = start.toISOString().split('T')[0]
-    const endStr = end.toISOString().split('T')[0]
-
-    const response = await fetch(
-      `http://localhost:8080/api/lessons?start_date=${startStr}&end_date=${endStr}`,
-      {
-        credentials: 'include',
-      },
-    )
-
-    if (!response.ok) throw new Error('Failed to fetch lessons')
-
-    interface Lesson {
-      id: number
-      teacher_id: number
-      student_id: number
-      subject_id: number
-      start_time: string
-      end_time: string
-      status: string
-      is_recurring: boolean
-      teacher_name: string
-      student_name: string
-      subject_name: string
-    }
-
-    const data = (await response.json()) as { lessons: Lesson[] }
-    const allLessons = data.lessons || []
-
-    // Filter lessons:
-    // 1. Lessons taught by this teacher (can edit/delete these)
-    // 2. Lessons for students connected to this teacher (can only view these)
-    const teacherLessons = allLessons.filter((lesson) => {
-      const isTeacherLesson = lesson.teacher_id === teacherId
-      const isStudentConnectedLesson = students.value.some(
-        (student) => student.id === lesson.student_id,
-      )
-      return isTeacherLesson || isStudentConnectedLesson
-    })
-
-    // Convert to calendar events with different colors
-    const events = teacherLessons.map((lesson) => {
-      const teacherIdNum = parseInt(String(lesson.teacher_id), 10)
-      const currentTeacherNum = teacherId || 0
-      const isOwned = teacherIdNum === currentTeacherNum
-      console.log(
-        `Lesson ${lesson.id}: teacher_id=${teacherIdNum} (type: ${typeof teacherIdNum}), currentTeacherId=${currentTeacherNum} (type: ${typeof currentTeacherNum}), isOwned=${isOwned}`,
-      )
-      return {
-        id: lesson.id.toString(),
-        title: isOwned
-          ? `${lesson.subject_name}"\n"${lesson.student_name}`
-          : `${lesson.teacher_name} - ${lesson.subject_name}"\n"${lesson.student_name}`,
-        start: lesson.start_time,
-        end: lesson.end_time,
-        backgroundColor: isOwned ? '#38aad9' : '#6c757d', // Own lessons blue, others gray
-        borderColor: isOwned ? '#2a8fc7' : '#5a6268',
-        editable: isOwned, // Can edit only own lessons
-        extendedProps: {
-          teacherId: lesson.teacher_id,
-          studentId: lesson.student_id,
-          subjectId: lesson.subject_id,
-          studentName: lesson.student_name,
-          teacherName: lesson.teacher_name,
-          subjectName: lesson.subject_name,
-          status: lesson.status,
-          isRecurring: lesson.is_recurring,
-          isOwned: isOwned,
-        },
-      }
-    })
-
+    await fetchLessons(start, end)
+    
+    // Convert lessons to calendar events
     const calendarApi = getCalendarApi()
-    if (calendarApi) {
+    if (calendarApi && lessons.value) {
       calendarApi.removeAllEvents()
-      calendarApi.addEventSource([
-        ...generateBreakPeriods(start, end),
-        ...generateAvailableSlots(start, end),
-        ...events,
-      ])
+      
+      const events = lessons.value.map((lesson) => {
+        const isOwned = lesson.teacher_id === getCurrentUserId()
+        return {
+          id: String(lesson.id),
+          title: isOwned
+            ? `${lesson.subject_name}\n${lesson.student_name}`
+            : `${lesson.teacher_name} - ${lesson.subject_name}\n${lesson.student_name}`,
+          start: lesson.start_time,
+          end: lesson.end_time,
+          backgroundColor: isOwned ? '#38aad9' : '#6c757d',
+          borderColor: isOwned ? '#2a8fc7' : '#5a6268',
+          editable: isOwned,
+          extendedProps: {
+            teacherId: lesson.teacher_id,
+            studentId: lesson.student_id,
+            subjectId: lesson.subject_id,
+            studentName: lesson.student_name,
+            teacherName: lesson.teacher_name,
+            subjectName: lesson.subject_name,
+            status: lesson.status,
+            isRecurring: lesson.is_recurring,
+            isOwned: isOwned,
+          },
+        }
+      })
+      
+      calendarApi.addEventSource(events)
     }
   } catch (error) {
     console.error('Error fetching lessons:', error)
@@ -300,13 +262,6 @@ const generateSlotsForDay = (date: Date) => {
   ]
 }
 
-// Calculate end time as 1 hour after start time
-const calculateEndTime = (startTimeStr: string) => {
-  const startTime = new Date(startTimeStr)
-  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000)
-  return formatForDateTimeInput(endTime.toISOString())
-}
-
 // Get calendar API instance
 const getCalendarApi = () => {
   if (calendarRef.value) {
@@ -316,442 +271,60 @@ const getCalendarApi = () => {
 }
 
 // Handle event drag and drop
-const handleTeacherEventDrop = (dropInfo: unknown) => {
-  const info = dropInfo as {
-    event: {
-      id: string
-      title: string
-      startStr: string
-      endStr: string
-      extendedProps: {
-        isOwned: boolean
-        teacherId: number
-        studentId: number
-        subjectId: number
-        isRecurring: boolean
-        status: string
-        teacherName: string
-        studentName: string
-        subjectName: string
-      }
-    }
-    oldEvent: {
-      startStr: string
-      endStr: string
-    }
-    revert: () => void
-  }
-
-  console.log('Event moved:', info)
-
-  const event = info.event
-
-  // Check if user owns this lesson
-  if (!event.extendedProps.isOwned) {
+const handleTeacherEventDrop = (dropInfo: any) => {
+  const event = dropInfo.event
+  const lesson = lessons.value.find(l => String(l.id) === event.id)
+  
+  if (!lesson || lesson.teacher_id !== getCurrentUserId()) {
+    dropInfo.revert()
     alert('You can only edit your own lessons')
-    info.revert()
     return
   }
 
-  // Use local times from FullCalendar
-  const newStart = formatForDateTimeInput(event.startStr)
-  const newEnd = formatForDateTimeInput(event.endStr)
+  composableHandleEventDrop(
+    event.id,
+    event.title,
+    dropInfo.oldEvent.startStr,
+    dropInfo.oldEvent.endStr,
+    event.startStr,
+    event.endStr,
+    lesson.is_recurring,
+    lesson.teacher_id,
+    lesson.student_id,
+    lesson.subject_id,
+    lesson.status,
+  )
 
-  movedEventInfo.value = {
-    id: event.id,
-    title: event.title,
-    oldStart: formatForDateTimeInput(info.oldEvent.startStr),
-    oldEnd: formatForDateTimeInput(info.oldEvent.endStr),
-    newStart: newStart,
-    newEnd: newEnd,
-    isRecurring: event.extendedProps.isRecurring,
-    teacherId: event.extendedProps.teacherId,
-    studentId: event.extendedProps.studentId,
-    subjectId: event.extendedProps.subjectId,
-    status: event.extendedProps.status,
-  }
-
-  recurringOption.value = 'this'
-  showMoveConfirmModal.value = true
-
-  // Revert the visual change until user confirms
-  info.revert()
+  dropInfo.revert()
 }
-
-// Confirm teacher event move
-const confirmTeacherEventMove = async (applyToAll: boolean = false) => {
-  if (!movedEventInfo.value) return
-
-  isUpdatingLesson.value = true
-
-  try {
-    // Convert local times to UTC for backend
-    const startTimeFormatted = formatForBackend(movedEventInfo.value.newStart)
-    const endTimeFormatted = formatForBackend(movedEventInfo.value.newEnd)
-
-    const lessonData = {
-      teacher_id: movedEventInfo.value.teacherId,
-      student_id: movedEventInfo.value.studentId,
-      subject_id: movedEventInfo.value.subjectId,
-      start_time: startTimeFormatted,
-      end_time: endTimeFormatted,
-      is_recurring: movedEventInfo.value.isRecurring,
-      status: movedEventInfo.value.status,
-    }
-
-    console.log(
-      'Moving lesson (UTC):',
-      movedEventInfo.value.id,
-      lessonData,
-      'Apply to all:',
-      applyToAll,
-    )
-    console.log('Local times were:', movedEventInfo.value.newStart, movedEventInfo.value.newEnd)
-
-    const response = await fetch(
-      `http://localhost:8080/api/lessons/${movedEventInfo.value.id}?apply_to_all=${applyToAll}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(lessonData),
-      },
-    )
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to move lesson')
-    }
-
-    const result = await response.json()
-    console.log('Lesson moved successfully:', result)
-
-    // Refresh calendar to show the updated event
-    const calendarApi = getCalendarApi()
-    if (calendarApi) {
-      const view = calendarApi.view
-      await fetchTeacherCalendarLessons(view.activeStart, view.activeEnd)
-    }
-  } catch (error) {
-    console.error('Error moving lesson:', error)
-    alert(`Failed to move lesson: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  } finally {
-    isUpdatingLesson.value = false
-    showMoveConfirmModal.value = false
-    movedEventInfo.value = null
-  }
-}
-
-// Cancel event move
-const cancelTeacherEventMove = () => {
-  showMoveConfirmModal.value = false
-  movedEventInfo.value = null
-}
-
-// Handle event drag and drop (old function - remove updateLessonFromDrag as we're using modal now)
 
 // Handle calendar date selection for new lesson
-const handleDateSelect = (info: { startStr: string; endStr: string }) => {
-  // info.startStr and info.endStr are already ISO strings from FullCalendar
-  // Format them for the datetime-local input
-  const startFormatted = formatForDateTimeInput(info.startStr)
-  const endFormatted = formatForDateTimeInput(info.endStr)
-
-  selectedTimeSlot.value = {
-    start: startFormatted,
-    end: endFormatted,
-  }
-
-  newLesson.value.start = startFormatted
-  newLesson.value.end = endFormatted
-  newLesson.value.teacher = String(getCurrentUserId())
-  showLessonModal.value = true
+const handleDateSelect = (info: any) => {
+  composableHandleDateSelect(
+    formatForDateTimeInput(info.startStr),
+    formatForDateTimeInput(info.endStr),
+  )
 }
 
 // Handle event click to edit or view lesson
-const handleTeacherEventClick = (clickInfo: { event: unknown }) => {
-  const event = clickInfo.event as {
-    id: string
-    title: string
-    startStr: string
-    endStr: string
-    extendedProps: {
-      isOwned: boolean
-      teacherId: number
-      studentId: number
-      subjectId: number
-      isRecurring: boolean
-      status: string
-      teacherName: string
-      studentName: string
-      subjectName: string
-    }
-  }
+const handleTeacherEventClick = (clickInfo: any) => {
+  const event = clickInfo.event
+  const lesson = lessons.value.find(l => String(l.id) === event.id)
+  
+  if (!lesson) return
 
-  // Only allow editing own lessons
-  if (event.extendedProps.isOwned) {
-    selectedLesson.value = {
-      id: event.id,
-      title: event.title,
-      start: formatForDateTimeInput(event.startStr),
-      end: formatForDateTimeInput(event.endStr),
-      teacherId: event.extendedProps.teacherId,
-      studentId: event.extendedProps.studentId,
-      subjectId: event.extendedProps.subjectId,
-      isRecurring: event.extendedProps.isRecurring,
-      status: event.extendedProps.status,
-      teacherName: event.extendedProps.teacherName,
-      studentName: event.extendedProps.studentName,
-      subjectName: event.extendedProps.subjectName,
-      isOwned: event.extendedProps.isOwned,
-    }
-    showEditModal.value = true
+  const isOwned = lesson.teacher_id === getCurrentUserId()
+  
+  if (isOwned) {
+    composableHandleEventClick(lesson, isOwned)
   } else {
     // Show view-only info for other teachers' lessons
     alert(
-      `${event.extendedProps.teacherName}'s lesson: ${event.extendedProps.subjectName}\nStudent: ${event.extendedProps.studentName}`,
+      `${lesson.teacher_name}'s lesson: ${lesson.subject_name}\nStudent: ${lesson.student_name}`,
     )
   }
 }
 
-// Format date for datetime-local input (show local time to user)
-const formatForDateTimeInput = (dateStr: string) => {
-  // Input from backend is UTC (e.g., "2024-01-16T10:00:00")
-  // We need to show it as local time in the datetime-local input
-  const date = new Date(dateStr)
-
-  // Get the local time components
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`
-}
-
-// Format date for backend (convert local to UTC)
-const formatForBackend = (dateTimeStr: string) => {
-  // Input is from datetime-local input field (format: "YYYY-MM-DDTHH:mm")
-  // This represents the user's local time, convert to UTC for backend
-  const date = new Date(dateTimeStr)
-  return date.toISOString().slice(0, 19) // Format: "2024-01-16T10:00:00" in UTC
-}
-
-// Format date and time for display (matching admin format)
-const formatDateTime = (dateTimeStr: string) => {
-  const date = new Date(dateTimeStr)
-  return date.toLocaleString([], {
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-// Create new lesson
-const createLesson = async () => {
-  if (
-    !newLesson.value.student ||
-    !newLesson.value.subject ||
-    !newLesson.value.start ||
-    !newLesson.value.end
-  ) {
-    lessonMessage.value = 'Please fill in all fields'
-    return
-  }
-
-  isCreatingLesson.value = true
-  lessonMessage.value = ''
-
-  try {
-    const lessonData = {
-      teacher_id: parseInt(newLesson.value.teacher),
-      student_id: parseInt(newLesson.value.student),
-      subject_id: parseInt(newLesson.value.subject),
-      start_time: formatForBackend(newLesson.value.start),
-      end_time: formatForBackend(newLesson.value.end),
-      is_recurring: newLesson.value.isRecurring,
-    }
-    console.log('Creating lesson with data:', lessonData)
-
-    const response = await fetch('http://localhost:8080/api/lessons', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(lessonData),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to create lesson')
-    }
-
-    lessonMessage.value = 'Lesson created successfully!'
-    resetLessonForm()
-    showLessonModal.value = false
-
-    // Refresh calendar using actual view dates
-    const calendarApi = getCalendarApi()
-    if (calendarApi) {
-      const view = calendarApi.view
-      await fetchTeacherCalendarLessons(view.activeStart, view.activeEnd)
-    }
-
-    setTimeout(() => {
-      lessonMessage.value = ''
-    }, 2000)
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error creating lesson:', error)
-    lessonMessage.value = `Error: ${errorMsg}`
-  } finally {
-    isCreatingLesson.value = false
-  }
-}
-
-// Update existing lesson
-const updateLesson = async () => {
-  if (
-    !selectedLesson.value ||
-    !selectedLesson.value.start ||
-    !selectedLesson.value.end ||
-    !selectedLesson.value.studentId ||
-    !selectedLesson.value.subjectId
-  ) {
-    editMessage.value = 'Please fill in all fields'
-    return
-  }
-
-  // Check ownership
-  if (selectedLesson.value.teacherId !== getCurrentUserId()) {
-    editMessage.value = 'You can only edit your own lessons'
-    return
-  }
-
-  isUpdatingLesson.value = true
-  editMessage.value = ''
-
-  try {
-    const lessonData = {
-      teacher_id: selectedLesson.value.teacherId,
-      student_id: selectedLesson.value.studentId,
-      subject_id: selectedLesson.value.subjectId,
-      start_time: formatForBackend(selectedLesson.value.start),
-      end_time: formatForBackend(selectedLesson.value.end),
-      is_recurring: selectedLesson.value.isRecurring,
-      status: selectedLesson.value.status,
-    }
-    console.log('Updating lesson with data:', lessonData)
-
-    const response = await fetch(`http://localhost:8080/api/lessons/${selectedLesson.value.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(lessonData),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to update lesson')
-    }
-
-    editMessage.value = 'Lesson updated successfully!'
-    showEditModal.value = false
-
-    // Refresh calendar using actual view dates
-    const calendarApi = getCalendarApi()
-    if (calendarApi) {
-      const view = calendarApi.view
-      await fetchTeacherCalendarLessons(view.activeStart, view.activeEnd)
-    }
-
-    setTimeout(() => {
-      editMessage.value = ''
-    }, 2000)
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error updating lesson:', error)
-    editMessage.value = `Error: ${errorMsg}`
-  } finally {
-    isUpdatingLesson.value = false
-  }
-}
-
-// Delete lesson
-const deleteLesson = async () => {
-  if (!selectedLesson.value || !selectedLesson.value.id) return
-
-  // Check ownership
-  if (selectedLesson.value.teacherId !== getCurrentUserId()) {
-    editMessage.value = 'You can only delete your own lessons'
-    return
-  }
-
-  if (!confirm('Are you sure you want to delete this lesson?')) return
-
-  isDeletingLesson.value = true
-  editMessage.value = ''
-
-  try {
-    const response = await fetch(`http://localhost:8080/api/lessons/${selectedLesson.value.id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to delete lesson')
-    }
-
-    editMessage.value = 'Lesson deleted successfully!'
-    showEditModal.value = false
-
-    // Refresh calendar using actual view dates
-    const calendarApi = getCalendarApi()
-    if (calendarApi) {
-      const view = calendarApi.view
-      await fetchTeacherCalendarLessons(view.activeStart, view.activeEnd)
-    }
-
-    setTimeout(() => {
-      editMessage.value = ''
-    }, 2000)
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error deleting lesson:', error)
-    editMessage.value = `Error: ${errorMsg}`
-  } finally {
-    isDeletingLesson.value = false
-  }
-}
-
-// Reset lesson form
-const resetLessonForm = () => {
-  newLesson.value = {
-    teacher: String(getCurrentUserId()) || '',
-    student: '',
-    subject: '',
-    start: '',
-    end: '',
-    isRecurring: false,
-  }
-  lessonMessage.value = ''
-}
-
-// Close modals
-const closeModal = () => {
-  showLessonModal.value = false
-  resetLessonForm()
-}
-
-const closeEditModal = () => {
-  showEditModal.value = false
-  editMessage.value = ''
-}
 
 // Calendar options configuration
 const calendarOptions = ref({
@@ -791,7 +364,7 @@ const calendarOptions = ref({
   eventDrop: handleTeacherEventDrop,
   datesSet: (dateInfo: unknown) => {
     const info = dateInfo as { start: Date; end: Date }
-    fetchTeacherCalendarLessons(info.start, info.end)
+    fetchTeacherLessons(info.start, info.end)
   },
   timeZone: 'local',
   eventTimeFormat: {
@@ -814,9 +387,9 @@ const calendarOptions = ref({
 
 // Watch for start time changes and auto-set end time to 1 hour later
 watch(
-  () => newLesson.value.start,
+  () => newLesson.value?.start,
   (newStartTime) => {
-    if (newStartTime) {
+    if (newStartTime && newLesson.value) {
       newLesson.value.end = calculateEndTime(newStartTime)
     }
   },
@@ -846,10 +419,6 @@ onMounted(() => {
           <h3>Teaching Subjects</h3>
           <p>Manage your subjects</p>
         </button>
-        <button class="teacher-card" @click="showConnections">
-          <h3>Connections</h3>
-          <p>Connect with students</p>
-        </button>
         <button class="teacher-card" @click="showProfile">
           <h3>My Profile</h3>
           <p>Manage your account information</p>
@@ -873,10 +442,8 @@ onMounted(() => {
           <div class="empty-state">
             <h3>No Students Connected Yet</h3>
             <p>
-              You haven't connected with any students yet. Use the Connections section to connect
-              with your students.
+              You currently don't have any connected students. Contact your admin to establish student connections.
             </p>
-            <button @click="showConnections" class="btn-primary">Go to Connections</button>
           </div>
         </div>
 
@@ -904,273 +471,43 @@ onMounted(() => {
         <h1>Lesson Calendar</h1>
       </div>
       <div class="section-content">
-        <!-- Lesson Creation Modal -->
-        <div v-if="showLessonModal" class="modal-overlay" @click="closeModal">
-          <div class="modal-content" @click.stop>
-            <div class="modal-header">
-              <h2>Create New Lesson</h2>
-              <button class="close-btn" @click="closeModal">×</button>
-            </div>
-
-            <div class="modal-body">
-              <!-- Selected Time Display -->
-              <div v-if="selectedTimeSlot.start" class="time-selection">
-                <div class="form-group time-input-group">
-                  <label for="start-time">Start Time:</label>
-                  <input
-                    id="start-time"
-                    v-model="newLesson.start"
-                    type="datetime-local"
-                    class="form-input time-input"
-                    required
-                  />
-                </div>
-                <div class="form-group time-input-group">
-                  <label for="end-time">End Time:</label>
-                  <input
-                    id="end-time"
-                    v-model="newLesson.end"
-                    type="datetime-local"
-                    class="form-input time-input"
-                    required
-                  />
-                </div>
-              </div>
-
-              <!-- Lesson Form -->
-              <form @submit.prevent="createLesson" class="lesson-form">
-                <div class="form-group">
-                  <label for="student">Select Student:</label>
-                  <select id="student" v-model="newLesson.student" class="form-select" required>
-                    <option value="">Choose a connected student...</option>
-                    <option
-                      v-for="student in students"
-                      :key="student.id"
-                      :value="String(student.id)"
-                    >
-                      {{ student.first_name }} {{ student.last_name }}
-                    </option>
-                  </select>
-                </div>
-
-                <div class="form-group">
-                  <label for="subject">Select Subject:</label>
-                  <select id="subject" v-model="newLesson.subject" class="form-select" required>
-                    <option value="">Choose a subject...</option>
-                    <option
-                      v-for="subject in subjects"
-                      :key="subject.id"
-                      :value="String(subject.id)"
-                    >
-                      {{ subject.name }}
-                    </option>
-                  </select>
-                </div>
-
-                <div class="form-group">
-                  <label class="checkbox-label">
-                    <input v-model="newLesson.isRecurring" type="checkbox" class="checkbox-input" />
-                    <span class="checkmark"></span>
-                    Recurring Lesson (weekly at same time)
-                  </label>
-                </div>
-
-                <div
-                  v-if="lessonMessage"
-                  class="message"
-                  :class="{ error: lessonMessage.includes('Error') }"
-                >
-                  {{ lessonMessage }}
-                </div>
-
-                <div class="form-actions">
-                  <button type="button" class="btn-cancel" @click="closeModal">Cancel</button>
-                  <button type="submit" class="btn-create" :disabled="isCreatingLesson">
-                    {{ isCreatingLesson ? 'Creating...' : 'Create Lesson' }}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-
         <!-- Calendar -->
         <div class="calendar-container">
           <FullCalendar ref="calendarRef" :options="calendarOptions" />
         </div>
 
+        <!-- New Lesson Modal (Create Mode) -->
+        <LessonFormModal
+          :is-open="showLessonModal"
+          :is-edit-mode="false"
+          :lesson="newLesson"
+          :teachers="[]"
+          :students="students"
+          :subjects="subjects"
+          @submit="createLesson"
+          @close="closeModal"
+        />
+
         <!-- Edit Lesson Modal -->
-        <div v-if="showEditModal && selectedLesson" class="modal-overlay" @click="closeEditModal">
-          <div class="modal-content" @click.stop>
-            <div class="modal-header">
-              <h2>{{ selectedLesson.isOwned ? 'Edit Lesson' : 'Lesson Details (View Only)' }}</h2>
-              <button class="close-btn" @click="closeEditModal">×</button>
-            </div>
-
-            <div class="modal-body">
-              <form @submit.prevent="selectedLesson.isOwned && updateLesson()" class="lesson-form">
-                <div class="form-group">
-                  <label for="edit-subject">Subject:</label>
-                  <input
-                    id="edit-subject"
-                    v-model="selectedLesson.subjectName"
-                    type="text"
-                    class="form-input"
-                    :disabled="!selectedLesson.isOwned"
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label for="edit-student">Student:</label>
-                  <select
-                    id="edit-student"
-                    v-model="selectedLesson.studentId"
-                    class="form-select"
-                    :disabled="!selectedLesson.isOwned"
-                  >
-                    <option :value="selectedLesson.studentId">
-                      {{ selectedLesson.studentName }}
-                    </option>
-                    <option
-                      v-for="student in students"
-                      :key="student.id"
-                      :value="student.id"
-                    >
-                      {{ student.first_name }} {{ student.last_name }}
-                    </option>
-                  </select>
-                </div>
-
-                <div class="form-group">
-                  <label for="edit-teacher">Teacher:</label>
-                  <input
-                    id="edit-teacher"
-                    v-model="selectedLesson.teacherName"
-                    type="text"
-                    class="form-input"
-                    disabled
-                  />
-                </div>
-
-                <div v-if="selectedLesson.isOwned" class="form-group time-input-group">
-                  <label for="edit-start">Start Time:</label>
-                  <input
-                    id="edit-start"
-                    v-model="selectedLesson.start"
-                    type="datetime-local"
-                    class="form-input time-input"
-                  />
-                </div>
-
-                <div v-if="selectedLesson.isOwned" class="form-group time-input-group">
-                  <label for="edit-end">End Time:</label>
-                  <input
-                    id="edit-end"
-                    v-model="selectedLesson.end"
-                    type="datetime-local"
-                    class="form-input time-input"
-                  />
-                </div>
-
-                <div v-if="!selectedLesson.isOwned" class="form-group">
-                  <label>Time:</label>
-                  <p class="form-text">
-                    {{ formatForDateTimeInput(selectedLesson.start) }} to
-                    {{ formatForDateTimeInput(selectedLesson.end) }}
-                  </p>
-                </div>
-
-                <div
-                  v-if="editMessage"
-                  class="message"
-                  :class="{ error: editMessage.includes('Error') }"
-                >
-                  {{ editMessage }}
-                </div>
-
-                <div class="form-actions">
-                  <button type="button" class="btn-cancel" @click="closeEditModal">Close</button>
-                  <button
-                    v-if="selectedLesson.isOwned"
-                    type="button"
-                    class="btn-delete"
-                    @click="deleteLesson"
-                    :disabled="isDeletingLesson"
-                  >
-                    {{ isDeletingLesson ? 'Deleting...' : 'Delete Lesson' }}
-                  </button>
-                  <button
-                    v-if="selectedLesson.isOwned"
-                    type="submit"
-                    class="btn-create"
-                    :disabled="isUpdatingLesson"
-                  >
-                    {{ isUpdatingLesson ? 'Updating...' : 'Update Lesson' }}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <LessonFormModal
+          v-if="selectedLesson"
+          :is-open="showEditModal"
+          :is-edit-mode="true"
+          :lesson="selectedLesson"
+          :teachers="[]"
+          :students="students"
+          :subjects="subjects"
+          @submit="updateLesson"
+          @close="closeEditModal"
+        />
 
         <!-- Move Confirmation Modal -->
-        <div v-if="showMoveConfirmModal" class="modal-overlay" @click="cancelTeacherEventMove">
-          <div class="modal-content move-confirm-modal" @click.stop>
-            <div class="modal-header">
-              <h2>Move Lesson</h2>
-              <button class="close-btn" @click="cancelTeacherEventMove">×</button>
-            </div>
-
-            <div class="modal-body">
-              <div class="move-info" v-if="movedEventInfo">
-                <div class="info-section">
-                  <h3>{{ movedEventInfo.title }}</h3>
-                  <div class="time-change">
-                    <div class="time-row">
-                      <span class="time-label">From:</span>
-                      <span class="time-value">{{ formatDateTime(movedEventInfo.oldStart) }}</span>
-                    </div>
-                    <div class="time-row">
-                      <span class="time-label">To:</span>
-                      <span class="time-value new-time">{{
-                        formatDateTime(movedEventInfo.newStart)
-                      }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="recurring-options" v-if="movedEventInfo.isRecurring">
-                  <h4>This is a recurring lesson</h4>
-                  <div class="radio-group">
-                    <label class="radio-label">
-                      <input type="radio" v-model="recurringOption" value="this" />
-                      <span class="radio-checkmark"></span>
-                      Change only this occurrence
-                    </label>
-                    <label class="radio-label">
-                      <input type="radio" v-model="recurringOption" value="all" />
-                      <span class="radio-checkmark"></span>
-                      Change all future occurrences
-                    </label>
-                  </div>
-                </div>
-
-                <div class="move-actions">
-                  <button type="button" class="btn-cancel" @click="cancelTeacherEventMove">
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-save"
-                    @click="confirmTeacherEventMove(recurringOption === 'all')"
-                  >
-                    {{ movedEventInfo.isRecurring ? 'Save Changes' : 'Move Lesson' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConfirmMoveModal
+          :is-open="showMoveConfirmModal"
+          :move-info="movedEventInfo"
+          @confirm="confirmEventMove"
+          @close="closeMoveConfirmModal"
+        />
 
         <!-- Legend -->
         <div class="calendar-legend">
@@ -1194,17 +531,6 @@ onMounted(() => {
       </div>
       <div class="section-content">
         <p>Subject management content coming soon...</p>
-      </div>
-    </div>
-
-    <!-- Connections View -->
-    <div v-else-if="currentView === 'connections'" class="section-view">
-      <div class="section-header">
-        <button @click="goBack" class="back-btn">← Back to Dashboard</button>
-        <h1>My Connections</h1>
-      </div>
-      <div class="section-content">
-        <connections-section />
       </div>
     </div>
 

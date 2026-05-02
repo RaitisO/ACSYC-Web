@@ -34,6 +34,16 @@ const router = createRouter({
       component: () => import('../views/auth/ActivationView.vue'),
     },
     {
+      path: '/register-teacher',
+      name: 'register-teacher',
+      component: () => import('../views/auth/RegisterTeacherView.vue'),
+    },
+    {
+      path: '/force-password-change',
+      name: 'force-password-change',
+      component: () => import('../components/ForcePasswordChangeModal.vue'),
+    },
+    {
       path: '/dashboard',
       name: 'dashboard',
       component: () => import('../views/DashboardView.vue'),

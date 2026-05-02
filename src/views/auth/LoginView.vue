@@ -88,11 +88,12 @@ const handleLogin = async () => {
     console.log('[LoginView] 💾 Storing user in localStorage...')
     localStorage.setItem('user', JSON.stringify(data.user))
 
-    // Check if user needs to change password (first login)
-    // This would be indicated by a flag in the response or by checking if password is temporary
-    if (data.requires_password_change) {
-      console.log('[LoginView] 🔄 First login detected - showing password change modal')
-      showPasswordChangeModal.value = true
+    // Check if user needs to change password on first login (parent/student accounts)
+    console.log('[LoginView] 🔐 Checking needs_password_change flag:', data.needs_password_change)
+    if (data.needs_password_change) {
+      console.log('[LoginView] 🔄 First login detected - redirecting to password change...')
+      await router.push('/force-password-change')
+      console.log('[LoginView] 🚀 Successfully redirected to force password change')
     } else {
       console.log('[LoginView] 🚀 About to redirect to dashboard...')
       console.log('[LoginView] 🚀 userStore.isAuthenticated:', userStore.isAuthenticated)

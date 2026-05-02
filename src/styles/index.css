@@ -17,6 +17,7 @@
 
 /* ===== COMPONENT STYLES ===== */
 /* Component-specific styles will be imported here */
+@import './components.css';
 @import './components/sections.css';
 @import './components/registration.css';
 
@@ -29,7 +30,7 @@
 /* ===== VIEW STYLES (To be added in Phase 2) ===== */
 /* Page and view-specific styles */
 @import './views/auth.css';
-/* @import './views/dashboards.css'; */
+@import './views/dashboards.css';
 /* @import './views/admin.css'; */
 
 /* ===== UTILITY STYLES (To be added in Phase 4) ===== */

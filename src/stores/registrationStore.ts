@@ -46,6 +46,8 @@ export const useRegistrationStore = defineStore('registration', () => {
     date_of_birth: '',
     email: '',
     interests: '',
+    school_name: '',
+    grade_level: '',
   })
   const learningPreferences = ref<LearningPreferences>({
     learning_style: '',
@@ -109,12 +111,14 @@ export const useRegistrationStore = defineStore('registration', () => {
           return parentInfo.value.email.trim() !== ''
         }
       case 3:
-        // Student info - all fields required
+        // Student info - school_name and grade_level required, interests optional
         return (
           studentInfo.value.first_name.trim() !== '' &&
           studentInfo.value.last_name.trim() !== '' &&
           studentInfo.value.date_of_birth.trim() !== '' &&
-          studentInfo.value.interests.trim() !== ''
+          studentInfo.value.email.trim() !== '' &&
+          studentInfo.value.school_name.trim() !== '' &&
+          studentInfo.value.grade_level.trim() !== ''
         )
       case 4:
         // Learning preferences - all fields required
@@ -234,6 +238,8 @@ export const useRegistrationStore = defineStore('registration', () => {
       date_of_birth: '',
       email: '',
       interests: '',
+      school_name: '',
+      grade_level: '',
     }
     learningPreferences.value = {
       learning_style: '',

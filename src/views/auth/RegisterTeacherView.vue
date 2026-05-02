@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useFormValidation, ValidationRules } from '@/composables/useFormValidation'
 import { authService, invitationService } from '@/services'
 import '../../styles/views/auth.css'
 
@@ -26,9 +25,6 @@ const formData = ref({
 const errorMessage = ref('')
 const isLoading = ref(false)
 
-// Form validation
-const { registerField, validateField, validateForm } = useFormValidation()
-
 onMounted(async () => {
   // Check if code exists in URL
   if (!invitationCode.value) {
@@ -47,47 +43,79 @@ onMounted(async () => {
   } finally {
     isValidating.value = false
   }
-
-  // Register validation fields
-  registerField('first_name', '', [
-    ValidationRules.required('First name'),
-    ValidationRules.alphabetic,
-  ])
-  registerField('last_name', '', [
-    ValidationRules.required('Last name'),
-    ValidationRules.alphabetic,
-  ])
-  registerField('email', '', [ValidationRules.required('Email'), ValidationRules.email])
-  registerField('phone', '', [
-    ValidationRules.required('Phone number'),
-    ValidationRules.phone,
-  ])
-  registerField('date_of_birth', '', [
-    ValidationRules.required('Date of birth'),
-    ValidationRules.date,
-    ValidationRules.minAge(13),
-  ])
-  registerField('password', '', [
-    ValidationRules.required('Password'),
-    ValidationRules.strongPassword,
-  ])
-  registerField('confirmPassword', '', [
-    ValidationRules.required('Confirm password'),
-  ])
 })
 
 const handleRegister = async () => {
   errorMessage.value = ''
 
-  // Validate all fields
-  if (!validateForm()) {
-    errorMessage.value = 'Please fix the validation errors above'
-    return
+  // Validate all fields manually
+  const validationErrors: string[] = []
+
+  // First name validation
+  if (!formData.value.first_name || formData.value.first_name.trim() === '') {
+    validationErrors.push('First name is required')
+  } else if (!/^[a-zA-Z\s]+$/.test(formData.value.first_name)) {
+    validationErrors.push('First name must contain only letters')
   }
 
-  // Additional validation: check if passwords match
+  // Last name validation
+  if (!formData.value.last_name || formData.value.last_name.trim() === '') {
+    validationErrors.push('Last name is required')
+  } else if (!/^[a-zA-Z\s]+$/.test(formData.value.last_name)) {
+    validationErrors.push('Last name must contain only letters')
+  }
+
+  // Email validation
+  if (!formData.value.email || formData.value.email.trim() === '') {
+    validationErrors.push('Email is required')
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.value.email)) {
+    validationErrors.push('Please enter a valid email address')
+  }
+
+  // Phone validation
+  if (!formData.value.phone || formData.value.phone.trim() === '') {
+    validationErrors.push('Phone number is required')
+  } else if (!/^[\d\s\-\+\(\)]{10,}$/.test(formData.value.phone)) {
+    validationErrors.push('Please enter a valid phone number')
+  }
+
+  // Date of birth validation
+  if (!formData.value.date_of_birth) {
+    validationErrors.push('Date of birth is required')
+  } else if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.value.date_of_birth)) {
+    validationErrors.push('Please enter a valid date (YYYY-MM-DD)')
+  } else {
+    const birthDate = new Date(formData.value.date_of_birth)
+    const today = new Date()
+    const calculatedAge = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    const age = monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())
+      ? calculatedAge - 1
+      : calculatedAge
+    if (age < 13) {
+      validationErrors.push('You must be at least 13 years old')
+    }
+  }
+
+  // Password validation
+  if (!formData.value.password || formData.value.password.trim() === '') {
+    validationErrors.push('Password is required')
+  } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(formData.value.password)) {
+    validationErrors.push('Password must be at least 8 characters with uppercase, lowercase, number and special character')
+  }
+
+  // Confirm password validation
+  if (!formData.value.confirmPassword || formData.value.confirmPassword.trim() === '') {
+    validationErrors.push('Confirm password is required')
+  }
+
+  // Check if passwords match
   if (formData.value.password !== formData.value.confirmPassword) {
-    errorMessage.value = 'Passwords do not match'
+    validationErrors.push('Passwords do not match')
+  }
+
+  if (validationErrors.length > 0) {
+    errorMessage.value = validationErrors.join('\n')
     return
   }
 
@@ -108,9 +136,9 @@ const handleRegister = async () => {
     await authService.registerTeacher(submitData)
 
     console.log('Teacher registration successful')
-    // Redirect to login or success page
+    // Redirect to success page
     router.push({
-      name: 'teacher-registered',
+      name: 'register-success',
       query: { email: submitData.email },
     })
   } catch (error: any) {
@@ -168,7 +196,6 @@ const goToLogin = () => {
                 id="firstName"
                 v-model="formData.first_name"
                 placeholder="First name"
-                @blur="validateField('first_name')"
                 required
               />
             </div>
@@ -179,7 +206,6 @@ const goToLogin = () => {
                 id="lastName"
                 v-model="formData.last_name"
                 placeholder="Last name"
-                @blur="validateField('last_name')"
                 required
               />
             </div>
@@ -193,7 +219,6 @@ const goToLogin = () => {
               id="email"
               v-model="formData.email"
               placeholder="Enter your email"
-              @blur="validateField('email')"
               required
             />
           </div>
@@ -205,7 +230,6 @@ const goToLogin = () => {
               id="phoneNumber"
               v-model="formData.phone"
               placeholder="Enter your phone number"
-              @blur="validateField('phone')"
               required
             />
           </div>
@@ -217,7 +241,6 @@ const goToLogin = () => {
               type="date"
               id="dateOfBirth"
               v-model="formData.date_of_birth"
-              @blur="validateField('date_of_birth')"
               required
               class="date-field"
             />
@@ -231,7 +254,6 @@ const goToLogin = () => {
               id="password"
               v-model="formData.password"
               placeholder="Create a password"
-              @blur="validateField('password')"
               required
             />
             <small class="help-text"
@@ -246,7 +268,7 @@ const goToLogin = () => {
               id="confirmPassword"
               v-model="formData.confirmPassword"
               placeholder="Confirm your password"
-              @blur="validateField('confirmPassword')"
+
               required
             />
           </div>

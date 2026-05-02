@@ -1,89 +1,79 @@
 import apiService from './api'
-import { errorService } from './errorService'
-import { logger } from '@/utils/logger'
 
-// Type definitions for lessons
 interface Lesson {
-  id: string
-  title: string
-  description?: string
-  teacher_id: string
-  student_id: string
-  status: 'scheduled' | 'completed' | 'cancelled'
+  id: number | string
+  teacher_id: number
+  student_id: number
+  subject_id: number
   start_time: string
   end_time: string
-  subject?: string
-  notes?: string
-  created_at: string
-  updated_at: string
+  status: string
+  is_recurring: boolean
+  teacher_name: string
+  student_name: string
+  subject_name: string
+}
+
+interface Subject {
+  id: number
+  name: string
+}
+
+interface User {
+  id: number
+  first_name: string
+  last_name: string
+  email: string
 }
 
 interface CreateLessonRequest {
-  title: string
-  description?: string
-  teacher_id: string
-  student_id: string
+  teacher_id: number
+  student_id: number
+  subject_id: number
   start_time: string
   end_time: string
-  subject?: string
+  is_recurring: boolean
+  recurrence_pattern?: string
+  recurrence_end_date?: string
+  recurrence_interval?: number
 }
 
 interface UpdateLessonRequest {
-  title?: string
-  description?: string
-  status?: 'scheduled' | 'completed' | 'cancelled'
-  start_time?: string
-  end_time?: string
-  subject?: string
-  notes?: string
+  teacher_id: number
+  student_id: number
+  subject_id: number
+  start_time: string
+  end_time: string
+  is_recurring: boolean
+  status: string
+  apply_to?: string
 }
 
-interface LessonsResponse {
-  lessons: Lesson[]
-  total: number
+interface DropdownData {
+  subjects: Subject[]
+  teachers: User[]
+  students: User[]
 }
 
 class LessonService {
   /**
-   * Get all lessons with optional filters
-   * @param filters Optional filters (teacher_id, student_id, status, etc.)
-   * @returns List of lessons matching filters
+   * Get lessons by date range
+   * @param startDate YYYY-MM-DD format
+   * @param endDate YYYY-MM-DD format
+   * @returns List of lessons
    */
-  async getLessons(filters?: Record<string, any>): Promise<LessonsResponse> {
+  async getLessonsByDateRange(startDate: string, endDate: string): Promise<Lesson[]> {
     try {
-      const params = new URLSearchParams()
-      if (filters) {
-        Object.entries(filters).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            params.append(key, String(value))
-          }
-        })
-      }
-      const queryString = params.toString()
-      const endpoint = queryString ? `/lessons?${queryString}` : '/lessons'
-      const response = await apiService.get(endpoint)
-      logger.info('Lessons loaded', { filters }, 'lessonService')
-      return response.data
+      // Build query string with proper URL encoding
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      })
+      const response = await apiService.get(`/lessons?${params.toString()}`)
+      return response.data.lessons || []
     } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to load lessons', { filters, error: appError }, 'lessonService')
-      throw appError
-    }
-  }
-
-  /**
-   * Get a specific lesson by ID
-   * @param lessonId The lesson ID to fetch
-   * @returns Lesson data
-   */
-  async getLessonById(lessonId: string): Promise<Lesson> {
-    try {
-      const response = await apiService.get(`/lessons/${lessonId}`)
-      return response.data
-    } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to load lesson', { lessonId, error: appError }, 'lessonService')
-      throw appError
+      console.error('Failed to fetch lessons:', error)
+      throw error
     }
   }
 
@@ -94,82 +84,102 @@ class LessonService {
    */
   async createLesson(data: CreateLessonRequest): Promise<Lesson> {
     try {
+      console.log('createLesson: Sending data to server:', data)
       const response = await apiService.post('/lessons', data)
-      logger.info('Lesson created', { title: data.title }, 'lessonService')
-      return response.data
-    } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to create lesson', { data, error: appError }, 'lessonService')
-      throw appError
+      console.log('createLesson: Server response:', response)
+      console.log('createLesson: Response keys:', Object.keys(response || {}))
+
+      // apiService.post returns the parsed JSON directly (not wrapped in response.data)
+      if (!response || !response.lesson) {
+        console.error('createLesson: Invalid response structure:', response)
+        throw new Error('Invalid response from server - missing lesson data')
+      }
+
+      return response.lesson
+    } catch (error: any) {
+      console.error('createLesson: Error occurred:', error)
+
+      // Try to extract more detailed error information
+      let errorMessage = 'Unknown error'
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.response?.status) {
+        errorMessage = `Server error (${error.response.status})`
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      console.error('createLesson: Detailed error message:', errorMessage)
+
+      // Re-throw with the original error so it can be caught by the caller
+      throw error
     }
   }
 
   /**
    * Update an existing lesson
    * @param lessonId The lesson ID to update
-   * @param data Fields to update
-   * @returns Updated lesson
+   * @param data Updated lesson data
+   * @param applyToAll Whether to apply changes to all instances (for recurring lessons) - legacy
+   * @param applyTo Apply mode: "this", "future", or "all"
+   * @returns Success message
    */
-  async updateLesson(lessonId: string, data: UpdateLessonRequest): Promise<Lesson> {
+  async updateLesson(
+    lessonId: string | number,
+    data: UpdateLessonRequest,
+    applyToAll: boolean = false,
+    applyTo: string = 'this',
+  ): Promise<any> {
     try {
-      const response = await apiService.put(`/lessons/${lessonId}`, data)
-      logger.info('Lesson updated', { lessonId }, 'lessonService')
-      return response.data
+      // Support legacy parameter
+      const mode = applyToAll ? 'all' : applyTo
+      const url = `/lessons/${lessonId}?apply_to=${mode}`
+      const response = await apiService.put(url, data)
+      // apiService.put returns the parsed JSON directly
+      return response
     } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to update lesson', { lessonId, data, error: appError }, 'lessonService')
-      throw appError
+      console.error('Failed to update lesson:', error)
+      throw error
     }
   }
 
   /**
-   * Delete/cancel a lesson
+   * Delete a lesson
    * @param lessonId The lesson ID to delete
-   * @returns Deletion confirmation
+   * @param applyToAll Whether to delete all instances (for recurring lessons) - legacy
+   * @param applyTo Delete mode: "this", "future", or "all"
+   * @returns Success message
    */
-  async deleteLesson(lessonId: string): Promise<{ success: boolean }> {
+  async deleteLesson(
+    lessonId: string | number,
+    applyToAll: boolean = false,
+    applyTo: string = 'this',
+  ): Promise<any> {
     try {
-      const response = await apiService.delete(`/lessons/${lessonId}`)
-      logger.info('Lesson deleted', { lessonId }, 'lessonService')
-      return response.data
+      // Support legacy parameter
+      const mode = applyToAll ? 'all' : applyTo
+      const url = `/lessons/${lessonId}?apply_to=${mode}`
+      const response = await apiService.delete(url)
+      // apiService.delete returns the parsed JSON directly
+      return response
     } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to delete lesson', { lessonId, error: appError }, 'lessonService')
-      throw appError
+      console.error('Failed to delete lesson:', error)
+      throw error
     }
   }
 
   /**
-   * Get all lessons for a specific teacher
-   * @param teacherId The teacher ID
-   * @returns Lessons taught by this teacher
+   * Get dropdown data (subjects, teachers, students)
+   * @returns Dropdown data
    */
-  async getLessonsByTeacher(teacherId: string): Promise<LessonsResponse> {
+  async getDropdownData(): Promise<DropdownData> {
     try {
-      const response = await apiService.get(`/teachers/${teacherId}/lessons`)
-      logger.info('Teacher lessons loaded', { teacherId }, 'lessonService')
-      return response.data
+      const response = await apiService.get('/dropdown-data')
+      // apiService.get() already returns the parsed JSON data directly, not wrapped in a response object
+      return response
     } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to load teacher lessons', { teacherId, error: appError }, 'lessonService')
-      throw appError
-    }
-  }
-
-  /**
-   * Get all lessons for a specific student
-   * @param studentId The student ID
-   * @returns Lessons taken by this student
-   */
-  async getLessonsByStudent(studentId: string): Promise<LessonsResponse> {
-    try {
-      const response = await apiService.get(`/students/${studentId}/lessons`)
-      logger.info('Student lessons loaded', { studentId }, 'lessonService')
-      return response.data
-    } catch (error) {
-      const appError = errorService.handleError(error, 'lessonService')
-      logger.error('Failed to load student lessons', { studentId, error: appError }, 'lessonService')
-      throw appError
+      console.error('Failed to fetch dropdown data:', error)
+      throw error
     }
   }
 }

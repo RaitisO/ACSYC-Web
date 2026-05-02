@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { lessonService, preferenceService, connectionService } from '@/services'
+import { lessonService, preferenceService, connectionService, apiService } from '@/services'
 import { useAuth, usePagination } from '@/composables'
 import { useUiStore } from '@/stores'
 import '../../styles/views/dashboards.css'
@@ -26,13 +26,14 @@ const selectedTimeSlot = ref<any>(null)
 const selectedLesson = ref<any>(null)
 const movedEventInfo = ref<any>(null)
 const calendarRef = ref<any>(null)
+const isCalendarReady = ref(false)
 
 // Modal states - THESE WERE MISSING!
 const showLessonModal = ref(false)
 const showEditModal = ref(false)
 const showMoveConfirmModal = ref(false)
 const showConnectionModal = ref(false)
-
+const showTeacherInvitationModal = ref(false)
 const newLesson = ref({
   teacher: '',
   student: '',
@@ -57,6 +58,7 @@ onMounted(() => {
   uiStore.registerModal('moveConfirm')
   uiStore.registerModal('colorPicker')
   uiStore.registerModal('connection')
+  uiStore.registerModal('teacherInvitation')
 })
 
 // Teacher colors for calendar
@@ -406,7 +408,61 @@ const isSavingMiroBoard = ref(false)
 const toggleUserDetails = (userId: number) => {
   expandedUserId.value = expandedUserId.value === userId ? null : userId
 }
+// Teacher Invitation Management State
+const generatedInvitationLink = ref('')
+const invitationMessage = ref('')
+const isGeneratingInvitation = ref(false)
 
+// Generate teacher invitation link
+const generateTeacherInvitationLink = async () => {
+  invitationMessage.value = ''
+  isGeneratingInvitation.value = true
+
+  try {
+    const response = await apiService.post('/admin/teacher-invitations', {})
+
+    if (response.link) {
+      // Build full URL
+      const baseUrl = window.location.origin
+      generatedInvitationLink.value = baseUrl + response.link
+      invitationMessage.value = `✓ Invitation link generated successfully! Link expires in 24 hours.`
+    } else {
+      invitationMessage.value = `Error: No link returned from server`
+    }
+  } catch (error) {
+    console.error('Error generating invitation:', error)
+    invitationMessage.value = `Error: ${error instanceof Error ? error.message : 'Failed to generate invitation link'}`
+  } finally {
+    isGeneratingInvitation.value = false
+  }
+}
+
+// Copy invitation link to clipboard
+const copyInvitationLink = () => {
+  if (generatedInvitationLink.value) {
+    navigator.clipboard.writeText(generatedInvitationLink.value)
+    const oldMessage = invitationMessage.value
+    invitationMessage.value = '✓ Link copied to clipboard!'
+    setTimeout(() => {
+      invitationMessage.value = oldMessage
+    }, 2000)
+  }
+}
+
+// Close teacher invitation modal
+const closeTeacherInvitationModal = () => {
+  showTeacherInvitationModal.value = false
+  generatedInvitationLink.value = ''
+  invitationMessage.value = ''
+  isGeneratingInvitation.value = false
+}
+
+// Open teacher invitation modal
+const openTeacherInvitationModal = () => {
+  generatedInvitationLink.value = ''
+  invitationMessage.value = ''
+  showTeacherInvitationModal.value = true
+}
 // Open connection creation modal
 const openConnectionModal = (user: any, type: 'teacher-student' | 'parent-student') => {
   selectedUserForConnection.value = user
@@ -622,26 +678,27 @@ const calendarEvents = ref<any[]>([])
 
 // Function to fetch lessons from backend
 const fetchLessons = async (start: Date, end: Date) => {
+  // Validate dates before proceeding
+  if (!start || !end || !(start instanceof Date) || !(end instanceof Date) || isNaN(start.getTime()) || isNaN(end.getTime())) {
+    console.warn('Invalid date range provided to fetchLessons, skipping:', { start, end })
+    return
+  }
+
   try {
     const startStr = start.toISOString().split('T')[0]
     const endStr = end.toISOString().split('T')[0]
 
-    console.log(`Fetching lessons from ${startStr} to ${endStr}`)
-
-    // Fetch lessons
-    const lessonsResponse = await fetch(
-      `http://localhost:8080/api/lessons?start_date=${startStr}&end_date=${endStr}`,
-      {
-        credentials: 'include',
-      },
-    )
-
-    if (!lessonsResponse.ok) {
-      throw new Error('Failed to fetch lessons')
+    // Validate date strings are in correct format (YYYY-MM-DD)
+    if (!startStr || !endStr || startStr.length !== 10 || endStr.length !== 10 || !/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
+      console.warn('Invalid date string format:', { startStr, endStr, start, end })
+      return
     }
 
-    const lessonsData = await lessonsResponse.json()
-    console.log('Fetched lessons:', lessonsData.lessons)
+    console.log(`Fetching lessons from ${startStr} to ${endStr}`)
+
+    // Fetch lessons using lessonService
+    const lessonsData = await lessonService.getLessonsByDateRange(startStr, endStr)
+    console.log('Fetched lessons:', lessonsData)
 
     // Fetch teacher colors
     try {
@@ -666,7 +723,7 @@ const fetchLessons = async (start: Date, end: Date) => {
       // Continue without colors - will use defaults
     }
 
-    const events = lessonsData.lessons.map((lesson: any) => {
+    const events = lessonsData.map((lesson: any) => {
       const teacherColor = getTeacherColor(lesson.teacher_id)
       return {
         id: lesson.id.toString(),
@@ -755,8 +812,11 @@ const calendarOptions = ref({
   eventClick: handleEventClick,
   eventDrop: handleEventDrop,
   datesSet: (dateInfo: any) => {
-    console.log('Date range changed:', dateInfo)
-    fetchLessons(dateInfo.start, dateInfo.end)
+    console.log('Date range changed:', dateInfo, 'Calendar ready:', isCalendarReady.value)
+    // Only fetch lessons after calendar is properly initialized
+    if (isCalendarReady.value) {
+      fetchLessons(dateInfo.start, dateInfo.end)
+    }
   },
   timeZone: 'local',
   eventTimeFormat: {
@@ -960,15 +1020,7 @@ const manageUser = (user: any) => {
 // Fetch dropdown data from backend
 const fetchDropdownData = async () => {
   try {
-    const response = await fetch('http://localhost:8080/api/dropdown-data', {
-      credentials: 'include',
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch dropdown data')
-    }
-
-    const data = await response.json()
+    const data = await lessonService.getDropdownData()
     console.log('Dropdown data:', data)
 
     teachers.value = data.teachers || []
@@ -1251,25 +1303,8 @@ const confirmEventMove = async (applyToAll: boolean = false) => {
     )
     console.log('Local times were:', movedEventInfo.value.newStart, movedEventInfo.value.newEnd)
 
-    const response = await fetch(
-      `http://localhost:8080/api/lessons/${movedEventInfo.value.id}?apply_to_all=${applyToAll}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(lessonData),
-      },
-    )
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to move lesson')
-    }
-
-    const result = await response.json()
-    console.log('Lesson moved successfully:', result)
+    await lessonService.updateLesson(movedEventInfo.value.id, lessonData, applyToAll)
+    console.log('Lesson moved successfully')
 
     // Refresh calendar to show the updated event
     refreshCalendar()
@@ -1309,30 +1344,13 @@ const createLesson = async () => {
       start_time: startTimeFormatted,
       end_time: endTimeFormatted,
       is_recurring: newLesson.value.isRecurring,
-      recurrence_pattern: newLesson.value.isRecurring
-        ? newLesson.value.recurrencePattern
-        : undefined,
     }
 
     console.log('Sending lesson data (UTC):', lessonData)
     console.log('Local times were:', newLesson.value.start, newLesson.value.end)
 
-    const response = await fetch('http://localhost:8080/api/lessons', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(lessonData),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to create lesson')
-    }
-
-    const result = await response.json()
-    console.log('Lesson created successfully:', result)
+    await lessonService.createLesson(lessonData)
+    console.log('Lesson created successfully')
 
     // Reset and close
     resetLessonForm()
@@ -1367,22 +1385,8 @@ const updateLesson = async () => {
     console.log('Updating lesson (UTC):', selectedLesson.value.id, lessonData)
     console.log('Local times were:', selectedLesson.value.start, selectedLesson.value.end)
 
-    const response = await fetch(`http://localhost:8080/api/lessons/${selectedLesson.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(lessonData),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to update lesson')
-    }
-
-    const result = await response.json()
-    console.log('Lesson updated successfully:', result)
+    await lessonService.updateLesson(selectedLesson.value.id, lessonData)
+    console.log('Lesson updated successfully')
 
     showEditModal.value = false
     selectedLesson.value = null
@@ -1404,18 +1408,8 @@ const deleteLesson = async () => {
   }
 
   try {
-    const response = await fetch(`http://localhost:8080/api/lessons/${selectedLesson.value.id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to delete lesson')
-    }
-
-    const result = await response.json()
-    console.log('Lesson deleted successfully:', result)
+    await lessonService.deleteLesson(selectedLesson.value.id)
+    console.log('Lesson deleted successfully')
 
     showEditModal.value = false
     selectedLesson.value = null
@@ -1522,6 +1516,8 @@ onMounted(() => {
         ...generateAvailableSlots(startOfWeek, endOfWeek),
       ]
       calendarApi.addEventSource(backgroundEvents)
+      // Mark calendar as ready and fetch lessons
+      isCalendarReady.value = true
       fetchLessons(startOfWeek, endOfWeek)
     } else {
       // If calendar API isn't available yet, try again after a short delay
@@ -1533,6 +1529,8 @@ onMounted(() => {
             ...generateAvailableSlots(startOfWeek, endOfWeek),
           ]
           calendarApi.addEventSource(backgroundEvents)
+          // Mark calendar as ready and fetch lessons
+          isCalendarReady.value = true
           fetchLessons(startOfWeek, endOfWeek)
         }
       }, 100)
@@ -1548,21 +1546,7 @@ watch(showMoveConfirmModal, (newVal) => {
     recurringOption.value = 'this'
   }
 })
-// Placeholder functions for quick actions
-const editUserProfile = (user: any) => {
-  alert(`Edit profile for ${user.first_name} ${user.last_name} (Coming soon)`)
-}
-
-const resetUserPassword = (user: any) => {
-  if (confirm(`Reset password for ${user.first_name} ${user.last_name}?`)) {
-    alert(`Password reset link sent to ${user.email} (Coming soon)`)
-  }
-}
-
-const viewUserLessons = (user: any) => {
-  alert(`View lessons for ${user.first_name} ${user.last_name} (Coming soon)`)
-}
-
+// Deactivate user
 const deactivateUser = (user: any) => {
   if (
     confirm(
@@ -2304,7 +2288,86 @@ const closeMiroBoardModal = () => {
         </div>
       </div>
     </div>
+<!-- Teacher Invitation Modal -->
+    <div v-if="showTeacherInvitationModal" class="modal-overlay" @click="closeTeacherInvitationModal">
+      <div class="modal-content teacher-invitation-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Generate Teacher Invitation Link</h2>
+          <button class="close-btn" @click="closeTeacherInvitationModal">×</button>
+        </div>
 
+        <div class="modal-body">
+          <div class="invitation-display">
+            <div class="info-section">
+              <p>
+                Generate a unique invitation link for new teachers to join the platform. The link
+                will expire after 24 hours.
+              </p>
+            </div>
+
+            <button
+              v-if="!generatedInvitationLink"
+              type="button"
+              class="btn-generate-teacher-link"
+              @click="generateTeacherInvitationLink"
+              :disabled="isGeneratingInvitation"
+            >
+              {{ isGeneratingInvitation ? '⏳ Generating...' : '🔗 Generate Link' }}
+            </button>
+
+            <div v-if="generatedInvitationLink" class="link-display">
+              <input
+                type="text"
+                :value="generatedInvitationLink"
+                readonly
+                class="link-input"
+              />
+              <button
+                type="button"
+                @click="copyInvitationLink"
+                class="btn-copy"
+                title="Copy link to clipboard"
+              >
+                📋 Copy
+              </button>
+            </div>
+
+            <div
+              v-if="invitationMessage"
+              class="message"
+              :class="{ success: invitationMessage.includes('✓') }"
+            >
+              {{ invitationMessage }}
+            </div>
+
+            <div v-if="generatedInvitationLink" class="info-section">
+              <p class="info-hint">
+                <strong>How to use:</strong> Share this link with a teacher. They can use it to
+                register. The link is valid for 24 hours from generation.
+              </p>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button
+              v-if="generatedInvitationLink"
+              type="button"
+              @click="generateTeacherInvitationLink"
+              class="btn-generate-teacher-link"
+            >
+              🔄 Generate New Link
+            </button>
+            <button
+              type="button"
+              @click="closeTeacherInvitationModal"
+              class="btn-close"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- Main Admin Cards View -->
     <div v-if="currentView === 'main'">
       <h1>Admin Panel</h1>
@@ -2338,6 +2401,17 @@ const closeMiroBoardModal = () => {
         <div class="users-header">
           <h2>All System Users</h2>
           <p>Manage user connections and profiles</p>
+        </div>
+
+        <!-- Teacher Invitation Section -->
+        <div class="teacher-invitation-section">
+          <button
+            @click="openTeacherInvitationModal"
+            class="btn-generate-teacher-link"
+            title="Generate a registration link for new teachers"
+          >
+            🔗 Generate Teacher Link
+          </button>
         </div>
 
         <!-- Search Bar -->
@@ -2528,46 +2602,31 @@ const closeMiroBoardModal = () => {
                           </div>
                         </div>
 
-                        <!-- Quick Actions -->
+                        <!-- User-Specific Management Actions -->
                         <div class="details-section">
-                          <h4>Quick Actions</h4>
+                          <h4>User Management</h4>
                           <div class="quick-actions">
-                            <button class="btn-quick-action" @click="editUserProfile(user)">
-                              ✏️ Edit Profile
-                            </button>
-                            <button class="btn-quick-action" @click="resetUserPassword(user)">
-                              🔒 Reset Password
-                            </button>
-                            <button class="btn-quick-action" @click="viewUserLessons(user)">
-                              📅 View Lessons
-                            </button>
                             <button
                               v-if="user.role === 'teacher'"
                               class="btn-quick-action"
                               @click="openColorPickerModal(user)"
                               :style="{ backgroundColor: getTeacherColor(user.id) }"
-                              title="Set teacher color"
+                              title="Set teacher color for calendar"
                             >
-                              🎨 Set Color
-                            </button>
-                            <button
-                              v-if="user.role === 'parent'"
-                              class="btn-quick-action"
-                              @click="openNotesModal(user)"
-                              title="Add/edit personal notes"
-                            >
-                              📝 Notes
+                              🎨 Set Teacher Color
                             </button>
                             <button
                               v-if="user.role === 'student'"
                               class="btn-quick-action btn-miro"
                               @click="openMiroBoardModal(user)"
+                              title="Manage Miro boards for this student"
                             >
-                              🎨 Manage Miro Boards
+                              📊 Manage Miro Boards
                             </button>
                             <button
                               class="btn-quick-action btn-danger"
                               @click="deactivateUser(user)"
+                              title="Deactivate this user account"
                             >
                               ⚠️ Deactivate User
                             </button>

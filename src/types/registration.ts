@@ -45,6 +45,8 @@ export interface StudentInfo {
   date_of_birth: string
   email: string
   interests: string
+  school_name: string
+  grade_level: string
 }
 
 export interface LearningPreferences {

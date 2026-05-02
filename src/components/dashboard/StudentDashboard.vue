@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useLessons, useAuth } from '@/composables'
-import { useLessonStore, useConnectionStore } from '@/stores'
-import ConnectionsSection from '@/components/sections/ConnectionsSection.vue'
+import { useLessonStore } from '@/stores'
 import ProfileSection from '@/components/sections/ProfileSection.vue'
 import '../../styles/views/dashboards.css'
 import type { StudentMiroBoard } from '@/types/calendar'
@@ -13,38 +12,57 @@ defineOptions({
 
 // Stores
 const lessonStore = useLessonStore()
-const connectionStore = useConnectionStore()
+
+// Composables
+const { getCurrentUserId } = useAuth()
 
 // View state
-const currentView = ref<'main' | 'teachers' | 'progress' | 'connections' | 'profile'>('main')
+const currentView = ref<'main' | 'teachers' | 'progress' | 'profile'>('main')
 
 // Composable: lessons utility functions (formatDateTime, etc.)
 const { formatDateTime } = useLessons()
-
-// Composable: auth (for user ID)
-const { getCurrentUserId } = useAuth()
 
 // Computed: upcoming lessons from store
 const upcomingLessons = computed(() =>
   lessonStore.lessons.slice(0, 5), // Show 5 upcoming
 )
 
-// Computed: teachers from connectionStore
-const teachers = computed(() =>
-  connectionStore.connections.filter((c) => c.role === 'teacher'),
-)
+// Teachers state - fetched from teacher_student_relationship
+const teachers = ref<any[]>([])
+const isLoadingTeachers = ref(false)
 
 // Miro boards state
 const studentMiroBoards = ref<StudentMiroBoard[]>([])
 const isLoadingBoards = ref(false)
 
+// Fetch teachers from teacher_student_relationship
+const fetchTeachers = async () => {
+  isLoadingTeachers.value = true
+  try {
+    const response = await fetch('http://localhost:8080/api/students/teachers', {
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch teachers')
+    }
+
+    const data = await response.json()
+    teachers.value = data.teachers || []
+  } catch (error) {
+    console.error('Error fetching teachers:', error)
+    teachers.value = []
+  } finally {
+    isLoadingTeachers.value = false
+  }
+}
+
 // Navigation functions
 const showTeachers = async () => {
   currentView.value = 'teachers'
-  await connectionStore.fetchConnections()
+  await fetchTeachers()
 }
 const showProgress = () => (currentView.value = 'progress')
-const showConnections = () => (currentView.value = 'connections')
 const showProfile = () => (currentView.value = 'profile')
 const goBack = () => (currentView.value = 'main')
 
@@ -77,7 +95,6 @@ const fetchStudentMiroBoards = async () => {
 
 onMounted(async () => {
   await lessonStore.fetchLessons()
-  await connectionStore.fetchConnections()
   await fetchStudentMiroBoards()
 })
 </script>
@@ -95,10 +112,6 @@ onMounted(async () => {
         <button class="student-card" @click="showProgress">
           <h3>Progress</h3>
           <p>Track your learning progress</p>
-        </button>
-        <button class="student-card" @click="showConnections">
-          <h3>Connections</h3>
-          <p>Connect with teachers and parents</p>
         </button>
         <button class="student-card" @click="showProfile">
           <h3>My Profile</h3>
@@ -170,7 +183,7 @@ onMounted(async () => {
         <h1>My Teachers</h1>
       </div>
       <div class="section-content">
-        <div v-if="connectionStore.loading" class="loading">
+        <div v-if="isLoadingTeachers" class="loading">
           <p>Loading teachers...</p>
         </div>
 
@@ -178,10 +191,8 @@ onMounted(async () => {
           <div class="empty-state">
             <h3>No Teachers Connected Yet</h3>
             <p>
-              You haven't connected with any teachers yet. Use the Connections section to connect
-              with your teachers.
+              You haven't connected with any teachers yet. Please contact your administrator to set up connections.
             </p>
-            <button @click="showConnections" class="btn-primary">Go to Connections</button>
           </div>
         </div>
 
@@ -213,17 +224,6 @@ onMounted(async () => {
       </div>
       <div class="section-content">
         <p>Progress tracking coming soon...</p>
-      </div>
-    </div>
-
-    <!-- Connections View -->
-    <div v-else-if="currentView === 'connections'" class="section-view">
-      <div class="section-header">
-        <button @click="goBack" class="back-btn">← Back to Dashboard</button>
-        <h1>My Connections</h1>
-      </div>
-      <div class="section-content">
-        <connections-section />
       </div>
     </div>
 

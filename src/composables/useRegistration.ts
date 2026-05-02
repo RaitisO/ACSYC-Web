@@ -95,15 +95,16 @@ export function useRegistration() {
         parent_email: formData.parent_info.email,
         parent_phone: formData.parent_info.phone,
         parent_password: isNewFamily ? 'TempPassword123!' : '', // Temporary - will be set during verification
-        source_of_referral: 'web_registration', // Required field - default to web
         
-        // Student information
+        // Student information - use actual form data
         student_first_name: formData.student_info.first_name,
         student_last_name: formData.student_info.last_name,
         student_email: formData.student_info.email,
-        student_phone: '+37120000000', // Placeholder - must be Latvian format +371XXXXXXXX
-        gymnasium_status: 'not_planning', // Default if not specified
-        grade_level: '9', // Default if not specified
+        student_phone: formData.student_info.phone || '', // Use form phone, not hardcoded
+        student_date_of_birth: formData.student_info.date_of_birth, // Required: YYYY-MM-DD format
+        student_school_name: formData.student_info.school_name, // Required: from form
+        student_grade_level: formData.student_info.grade_level, // Required: from form
+        student_interests: formData.student_info.interests || '', // Optional: hobbies/interests
         
         // Learning preferences
         learning_goals: [1], // Default: at least one ID (assuming ID 1 exists)
@@ -127,7 +128,6 @@ export function useRegistration() {
         // Convert form times (strings like '9:00') to lesson_time_slot IDs (numbers like 2)
         availability: convertAvailabilityToBackendFormat(formData.subjects_availability.availability),
         availability_notes: formData.subjects_availability.custom_times || '',
-        grade_in_course: '9', // Default
         
         // Group lessons
         group_lesson_subjects: [],

@@ -100,16 +100,15 @@ watch(() => store.familyType, (newType) => {
 
 // Subjects list (expandable in the future)
 const subjectsList = [
-  { value: 'mathematics', label: 'Mathematics' },
+  { value: 'math', label: 'Math' },
   { value: 'english', label: 'English' },
-  { value: 'science', label: 'Science' },
-  { value: 'history', label: 'History' },
-  { value: 'geography', label: 'Geography' },
-  { value: 'language', label: 'Foreign Language' },
-  { value: 'art', label: 'Art' },
-  { value: 'music', label: 'Music' },
-  { value: 'sports', label: 'Sports' },
-  { value: 'technology', label: 'Technology' },
+  { value: 'latvian', label: 'Latvian' },
+  { value: 'russian', label: 'Russian' },
+  { value: 'physics', label: 'Physics' },
+  { value: 'biology', label: 'Biology' },
+  { value: 'chemistry', label: 'Chemistry' },
+  { value: 'programming', label: 'Programming' },
+
 ]
 
 // Computed
@@ -144,7 +143,9 @@ const validateCurrentStep = (): boolean => {
         store.studentInfo.first_name.trim() !== '' &&
         store.studentInfo.last_name.trim() !== '' &&
         store.studentInfo.date_of_birth.trim() !== '' &&
-        store.studentInfo.email.trim() !== ''
+        store.studentInfo.email.trim() !== '' &&
+        store.studentInfo.school_name.trim() !== '' &&
+        store.studentInfo.grade_level.trim() !== ''
       )
     case 4:
       return (
@@ -196,12 +197,12 @@ const handleSubmit = async () => {
 
   try {
     store.setIsSubmitting(true)
-    
+
     // Ensure family type is selected (should not happen if validation works)
     if (!store.familyType) {
       throw new Error('Family type must be selected')
     }
-    
+
     const response = await submitApplication({
       family_type: store.familyType,
       parent_info: store.parentInfo,
@@ -210,9 +211,9 @@ const handleSubmit = async () => {
       teacher_preferences: store.teacherPreferences,
       subjects_availability: store.subjectsAvailability,
     })
-    
+
     store.setSuccessMessage(response.message)
-    
+
     // Redirect to verification (user will receive email)
     setTimeout(() => {
       router.push('/register/success')
@@ -262,7 +263,7 @@ const toggleSubject = (subject: string) => {
   if (!Array.isArray(store.subjectsAvailability.subjects)) {
     store.subjectsAvailability.subjects = []
   }
-  
+
   const index = store.subjectsAvailability.subjects.indexOf(subject)
   if (index > -1) {
     store.subjectsAvailability.subjects.splice(index, 1)
@@ -379,7 +380,8 @@ const selectedSubjects = computed(() => {
             v-model="store.parentInfo.phone"
             type="tel"
             label="Phone Number"
-            placeholder="+1 (555) 123-4567"
+            placeholder="+371 20 000 000"
+            hint="International format: +[country code][phone number] (e.g., +37120000000, +12025551234)"
             required
           />
         </template>
@@ -393,7 +395,7 @@ const selectedSubjects = computed(() => {
             placeholder="john@example.com"
             hint="The email associated with your family's account"
             required
-            
+
           />
         </template>
       </div>
@@ -433,12 +435,26 @@ const selectedSubjects = computed(() => {
           required
           hint="Your student will use this email to log in"
         />
+        <FormInput
+          v-model="store.studentInfo.school_name"
+          label="School Name"
+          placeholder="e.g., Riga Secondary School #1"
+          required
+        />
 
+        <FormInput
+          v-model="store.studentInfo.grade_level"
+          label="Grade Level"
+          placeholder="e.g., 9, 10, 11, 12"
+          required
+        />
         <FormInput
           v-model="store.studentInfo.interests"
           label="Interests & Hobbies (Optional)"
           placeholder="e.g., Mathematics, Science, Music, Sports, etc."
         />
+
+
       </div>
 
       <!-- Step 4: Learning Preferences -->
@@ -529,7 +545,7 @@ const selectedSubjects = computed(() => {
         <div class="availability-section">
           <label class="section-label">Availability <span class="required-asterisk">*</span></label>
           <p class="availability-hint">Select time slots for each day you're available (at least one time per day)</p>
-          
+
           <div class="time-grid">
             <!-- Header row with times -->
             <div class="time-grid-header">
