@@ -698,7 +698,11 @@ const fetchLessons = async (start: Date, end: Date) => {
 
     // Fetch lessons using lessonService
     const lessonsData = await lessonService.getLessonsByDateRange(startStr, endStr)
-    console.log('Fetched lessons:', lessonsData)
+console.log('Fetched lessons:', lessonsData)
+if (lessonsData.length > 0) {
+  console.log('First lesson fields:', Object.keys(lessonsData[0]))
+  console.log('is_recurring value:', lessonsData[0].is_recurring)
+}
 
     // Fetch teacher colors
     try {
@@ -1246,6 +1250,7 @@ function handleEventDrop(dropInfo: any) {
   console.log('Event moved:', dropInfo)
 
   const event = dropInfo.event
+  console.log('isRecurring value:', event.extendedProps.isRecurring, 'Type:', typeof event.extendedProps.isRecurring)
 
   // Use local times from FullCalendar
   const newStart = formatForDateTimeInput(event.startStr)
@@ -1269,18 +1274,24 @@ function handleEventDrop(dropInfo: any) {
   event.setExtendedProp('oldStart', movedEventInfo.value.oldStart)
   event.setExtendedProp('oldEnd', movedEventInfo.value.oldEnd)
 
-  showMoveConfirmModal.value = true
+  // For recurring lessons, show apply-to modal; for non-recurring, show simple confirmation
+  if (event.extendedProps.isRecurring) {
+    currentApplyToOperation.value = 'move'
+    recurringOption.value = 'this'
+    showApplyToModal.value = true
+  } else {
+    showMoveConfirmModal.value = true
+  }
 
   // Revert the visual change until user confirms
   dropInfo.revert()
 }
 
 // Confirm event move
-const confirmEventMove = async (applyToAll: boolean = false) => {
+const confirmEventMove = async () => {
   if (!movedEventInfo.value) return
 
   try {
-    // Convert local times to UTC for backend
     const startTimeFormatted = formatForBackend(movedEventInfo.value.newStart)
     const endTimeFormatted = formatForBackend(movedEventInfo.value.newEnd)
 
@@ -1294,19 +1305,8 @@ const confirmEventMove = async (applyToAll: boolean = false) => {
       status: movedEventInfo.value.status,
     }
 
-    console.log(
-      'Moving lesson (UTC):',
-      movedEventInfo.value.id,
-      lessonData,
-      'Apply to all:',
-      applyToAll,
-    )
-    console.log('Local times were:', movedEventInfo.value.newStart, movedEventInfo.value.newEnd)
-
-    await lessonService.updateLesson(movedEventInfo.value.id, lessonData, applyToAll)
+    await lessonService.updateLesson(movedEventInfo.value.id, lessonData, recurringOption.value)
     console.log('Lesson moved successfully')
-
-    // Refresh calendar to show the updated event
     refreshCalendar()
   } catch (error) {
     console.error('Error moving lesson:', error)
@@ -1323,7 +1323,28 @@ const cancelEventMove = () => {
   movedEventInfo.value = null
   // Calendar will already be reverted visually due to dropInfo.revert()
 }
+// Cancel apply-to modal (for move/edit/delete)
+const cancelApplyToModal = () => {
+  showMoveConfirmModal.value = false
+  showApplyToModal.value = false
+  movedEventInfo.value = null
+  currentApplyToOperation.value = null
+  recurringOption.value = 'this'
+}
 
+// Handle apply-to confirmation for move/edit/delete operations
+const handleApplyToConfirm = async () => {
+  if (currentApplyToOperation.value === 'move') {
+    await confirmEventMove()
+  } else if (currentApplyToOperation.value === 'edit') {
+    await confirmEditWithApplyTo()
+  } else if (currentApplyToOperation.value === 'delete') {
+    await confirmDeleteWithApplyTo()
+  }
+  showApplyToModal.value = false
+  showMoveConfirmModal.value = false
+  currentApplyToOperation.value = null
+}
 // Lesson creation functions
 const createLesson = async () => {
   // Validate required fields
@@ -1337,14 +1358,16 @@ const createLesson = async () => {
     const startTimeFormatted = formatForBackend(newLesson.value.start)
     const endTimeFormatted = formatForBackend(newLesson.value.end)
 
-    const lessonData = {
-      teacher_id: parseInt(newLesson.value.teacher),
-      student_id: parseInt(newLesson.value.student),
-      subject_id: parseInt(newLesson.value.subject),
-      start_time: startTimeFormatted,
-      end_time: endTimeFormatted,
-      is_recurring: newLesson.value.isRecurring,
-    }
+   const lessonData = {
+  teacher_id: parseInt(newLesson.value.teacher),
+  student_id: parseInt(newLesson.value.student),
+  subject_id: parseInt(newLesson.value.subject),
+  start_time: startTimeFormatted,
+  end_time: endTimeFormatted,
+  is_recurring: newLesson.value.isRecurring,
+  recurrence_pattern: newLesson.value.isRecurring ? 'weekly' : 'none',
+  recurrence_interval: 1,
+}
 
     console.log('Sending lesson data (UTC):', lessonData)
     console.log('Local times were:', newLesson.value.start, newLesson.value.end)
@@ -1363,10 +1386,44 @@ const createLesson = async () => {
     alert(`Failed to create lesson: ${error.message}`)
   }
 }
+const confirmEditWithApplyTo = async () => {
+  if (!selectedLesson.value) return
+
+  try {
+    const startTimeFormatted = formatForBackend(selectedLesson.value.start)
+    const endTimeFormatted = formatForBackend(selectedLesson.value.end)
+
+    const lessonData = {
+      teacher_id: selectedLesson.value.teacherId,
+      student_id: selectedLesson.value.studentId,
+      subject_id: selectedLesson.value.subjectId,
+      start_time: startTimeFormatted,
+      end_time: endTimeFormatted,
+      is_recurring: selectedLesson.value.isRecurring,
+      status: selectedLesson.value.status,
+    }
+
+    await lessonService.updateLesson(selectedLesson.value.id, lessonData, recurringOption.value)
+    console.log('Lesson updated successfully')
+
+    showEditModal.value = false
+    showApplyToModal.value = false
+    selectedLesson.value = null
+    refreshCalendar()
+  } catch (error) {
+    console.error('Error updating lesson:', error)
+    alert(`Failed to update lesson: ${error.message}`)
+  }
+}
 // Update lesson function
 const updateLesson = async () => {
   if (!selectedLesson.value) return
-
+if (selectedLesson.value.isRecurring) {
+    currentApplyToOperation.value = 'edit'
+    recurringOption.value = 'this'
+    showApplyToModal.value = true
+    return
+  }
   try {
     // Convert local times to UTC for backend
     const startTimeFormatted = formatForBackend(selectedLesson.value.start)
@@ -1407,21 +1464,42 @@ const deleteLesson = async () => {
     return
   }
 
+  // If recurring lesson, show apply-to modal first
+  if (selectedLesson.value.isRecurring) {
+    currentApplyToOperation.value = 'delete'
+    recurringOption.value = 'this'
+    showApplyToModal.value = true
+    return
+  }
+
   try {
     await lessonService.deleteLesson(selectedLesson.value.id)
     console.log('Lesson deleted successfully')
 
     showEditModal.value = false
     selectedLesson.value = null
-
-    // Refresh calendar to remove deleted lesson
     refreshCalendar()
   } catch (error) {
     console.error('Error deleting lesson:', error)
     alert(`Failed to delete lesson: ${error.message}`)
   }
 }
+const confirmDeleteWithApplyTo = async () => {
+  if (!selectedLesson.value) return
 
+  try {
+    await lessonService.deleteLesson(selectedLesson.value.id, recurringOption.value)
+    console.log('Lesson deleted successfully')
+
+    showEditModal.value = false
+    showApplyToModal.value = false
+    selectedLesson.value = null
+    refreshCalendar()
+  } catch (error) {
+    console.error('Error deleting lesson:', error)
+    alert(`Failed to delete lesson: ${error.message}`)
+  }
+}
 // Update resetLessonForm to include isRecurring
 const resetLessonForm = () => {
   newLesson.value = {
@@ -1532,14 +1610,20 @@ onMounted(() => {
           // Mark calendar as ready and fetch lessons
           isCalendarReady.value = true
           fetchLessons(startOfWeek, endOfWeek)
+        } else {
+          // Final fallback - mark ready and fetch anyway
+          console.warn('Calendar API not available, fetching lessons anyway')
+          isCalendarReady.value = true
+          fetchLessons(startOfWeek, endOfWeek)
         }
       }, 100)
     }
   })
 })
 // Add with your other refs
-const recurringOption = ref<'this' | 'all'>('this')
-
+const recurringOption = ref<'this' | 'future' | 'all'>('this')
+const currentApplyToOperation = ref<'move' | 'edit' | 'delete' | null>(null)
+const showApplyToModal = ref(false)
 // Reset recurring option when modal opens
 watch(showMoveConfirmModal, (newVal) => {
   if (newVal && movedEventInfo.value?.isRecurring) {
@@ -1880,7 +1964,53 @@ const closeMiroBoardModal = () => {
       </div>
     </div>
 
-    <!-- Move Confirmation Modal -->
+    <!-- Apply-To Modal for Recurring Lessons -->
+    <div v-if="showApplyToModal" class="modal-overlay" @click="cancelApplyToModal">
+      <div class="modal-content apply-to-modal" @click.stop>
+        <div class="modal-header">
+          <h2>{{ currentApplyToOperation === 'delete' ? 'Delete Recurring Lesson' : currentApplyToOperation === 'edit' ? 'Edit Recurring Lesson' : 'Move Recurring Lesson' }}</h2>
+          <button class="close-btn" @click="cancelApplyToModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="apply-to-content">
+            <p>This is a recurring lesson. How would you like to apply this change?</p>
+
+            <div class="recurring-options">
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" v-model="recurringOption" value="this" />
+                  <span class="radio-checkmark"></span>
+                  <span><strong>This event only</strong></span>
+                  <span class="radio-description">Apply change only to this occurrence</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" v-model="recurringOption" value="future" />
+                  <span class="radio-checkmark"></span>
+                  <span><strong>This and future events</strong></span>
+                  <span class="radio-description">Apply change to this and all future occurrences</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" v-model="recurringOption" value="all" />
+                  <span class="radio-checkmark"></span>
+                  <span><strong>All events</strong></span>
+                  <span class="radio-description">Apply change to every occurrence of this lesson</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" class="btn-cancel" @click="cancelApplyToModal">Cancel</button>
+              <button type="button" class="btn-save" @click="handleApplyToConfirm">
+                {{ currentApplyToOperation === 'delete' ? 'Delete' : 'Apply Change' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Move Confirmation Modal (for non-recurring lessons) -->
     <div v-if="showMoveConfirmModal" class="modal-overlay" @click="cancelEventMove">
       <div class="modal-content move-confirm-modal" @click.stop>
         <div class="modal-header">
@@ -1899,38 +2029,14 @@ const closeMiroBoardModal = () => {
                 </div>
                 <div class="time-row">
                   <span class="time-label">To:</span>
-                  <span class="time-value new-time">{{
-                    formatDateTime(movedEventInfo.newStart)
-                  }}</span>
+                  <span class="time-value new-time">{{ formatDateTime(movedEventInfo.newStart) }}</span>
                 </div>
-              </div>
-            </div>
-
-            <div class="recurring-options" v-if="movedEventInfo.isRecurring">
-              <h4>This is a recurring lesson</h4>
-              <div class="radio-group">
-                <label class="radio-label">
-                  <input type="radio" v-model="recurringOption" value="this" />
-                  <span class="radio-checkmark"></span>
-                  Change only this occurrence
-                </label>
-                <label class="radio-label">
-                  <input type="radio" v-model="recurringOption" value="all" />
-                  <span class="radio-checkmark"></span>
-                  Change all future occurrences
-                </label>
               </div>
             </div>
 
             <div class="move-actions">
               <button type="button" class="btn-cancel" @click="cancelEventMove">Cancel</button>
-              <button
-                type="button"
-                class="btn-save"
-                @click="confirmEventMove(recurringOption === 'all')"
-              >
-                {{ movedEventInfo.isRecurring ? 'Save Changes' : 'Move Lesson' }}
-              </button>
+              <button type="button" class="btn-save" @click="confirmEventMove">Move Lesson</button>
             </div>
           </div>
         </div>
@@ -2410,7 +2516,7 @@ const closeMiroBoardModal = () => {
             class="btn-generate-teacher-link"
             title="Generate a registration link for new teachers"
           >
-            🔗 Generate Teacher Link
+            Generate Teacher Link
           </button>
         </div>
 

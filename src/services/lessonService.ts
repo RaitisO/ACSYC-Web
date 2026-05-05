@@ -70,7 +70,7 @@ class LessonService {
         end_date: endDate,
       })
       const response = await apiService.get(`/lessons?${params.toString()}`)
-      return response.data.lessons || []
+      return response.lessons || []
     } catch (error) {
       console.error('Failed to fetch lessons:', error)
       throw error
